@@ -146,76 +146,76 @@
 
 | 需求 | Phase | 状态 |
 |------|-------|------|
-| CALL-01 | — | Pending |
-| CALL-02 | — | Pending |
-| CALL-03 | — | Pending |
-| CALL-04 | — | Pending |
-| CALL-05 | — | Pending |
-| CALL-06 | — | Pending |
-| CALL-07 | — | Pending |
-| FS-01 | — | Pending |
-| FS-02 | — | Pending |
-| FS-03 | — | Pending |
-| FS-04 | — | Pending |
-| FS-05 | — | Pending |
-| BILL-01 | — | Pending |
-| BILL-02 | — | Pending |
-| BILL-03 | — | Pending |
-| BILL-04 | — | Pending |
-| BILL-05 | — | Pending |
-| ROUT-01 | — | Pending |
-| ROUT-02 | — | Pending |
-| ROUT-03 | — | Pending |
-| ROUT-04 | — | Pending |
-| WAST-01 | — | Pending |
-| WAST-02 | — | Pending |
-| WAST-03 | — | Pending |
-| WAST-04 | — | Pending |
-| REC-01 | — | Pending |
-| REC-02 | — | Pending |
-| REC-03 | — | Pending |
-| REC-04 | — | Pending |
-| HOOK-01 | — | Pending |
-| HOOK-02 | — | Pending |
-| HOOK-03 | — | Pending |
-| HOOK-04 | — | Pending |
-| AUTH-01 | — | Pending |
-| AUTH-02 | — | Pending |
-| AUTH-03 | — | Pending |
-| COMP-01 | — | Pending |
-| COMP-02 | — | Pending |
-| COMP-03 | — | Pending |
-| ADMN-01 | — | Pending |
-| ADMN-02 | — | Pending |
-| ADMN-03 | — | Pending |
-| ADMN-04 | — | Pending |
-| ADMN-05 | — | Pending |
-| ADMN-06 | — | Pending |
-| ADMN-07 | — | Pending |
-| ADMN-08 | — | Pending |
-| ADMN-09 | — | Pending |
-| ADMN-10 | — | Pending |
-| CLNT-01 | — | Pending |
-| CLNT-02 | — | Pending |
-| CLNT-03 | — | Pending |
-| CLNT-04 | — | Pending |
-| CLNT-05 | — | Pending |
-| CLNT-06 | — | Pending |
-| CLNT-07 | — | Pending |
-| UI-01 | — | Pending |
-| UI-02 | — | Pending |
-| UI-03 | — | Pending |
-| UI-04 | — | Pending |
-| INFR-01 | — | Pending |
-| INFR-02 | — | Pending |
-| INFR-03 | — | Pending |
-| INFR-04 | — | Pending |
+| AUTH-01 | Phase 1 | Pending |
+| AUTH-02 | Phase 1 | Pending |
+| AUTH-03 | Phase 1 | Pending |
+| BILL-01 | Phase 1 | Pending |
+| BILL-02 | Phase 1 | Pending |
+| BILL-03 | Phase 1 | Pending |
+| BILL-04 | Phase 1 | Pending |
+| BILL-05 | Phase 1 | Pending |
+| ROUT-01 | Phase 1 | Pending |
+| ROUT-02 | Phase 1 | Pending |
+| ROUT-03 | Phase 1 | Pending |
+| ROUT-04 | Phase 1 | Pending |
+| COMP-01 | Phase 1 | Pending |
+| COMP-02 | Phase 1 | Pending |
+| COMP-03 | Phase 1 | Pending |
+| INFR-01 | Phase 1 | Pending |
+| INFR-02 | Phase 1 | Pending |
+| INFR-03 | Phase 1 | Pending |
+| INFR-04 | Phase 1 | Pending |
+| CALL-01 | Phase 2 | Pending |
+| CALL-02 | Phase 2 | Pending |
+| CALL-03 | Phase 2 | Pending |
+| CALL-04 | Phase 2 | Pending |
+| CALL-05 | Phase 2 | Pending |
+| CALL-06 | Phase 2 | Pending |
+| CALL-07 | Phase 2 | Pending |
+| WAST-01 | Phase 2 | Pending |
+| WAST-02 | Phase 2 | Pending |
+| FS-01 | Phase 3 | Pending |
+| FS-02 | Phase 3 | Pending |
+| FS-03 | Phase 3 | Pending |
+| FS-04 | Phase 3 | Pending |
+| FS-05 | Phase 3 | Pending |
+| REC-01 | Phase 3 | Pending |
+| REC-02 | Phase 3 | Pending |
+| REC-03 | Phase 3 | Pending |
+| REC-04 | Phase 3 | Pending |
+| HOOK-01 | Phase 3 | Pending |
+| HOOK-02 | Phase 3 | Pending |
+| HOOK-03 | Phase 3 | Pending |
+| HOOK-04 | Phase 3 | Pending |
+| ADMN-01 | Phase 4 | Pending |
+| ADMN-02 | Phase 4 | Pending |
+| ADMN-03 | Phase 4 | Pending |
+| ADMN-04 | Phase 4 | Pending |
+| ADMN-05 | Phase 4 | Pending |
+| ADMN-06 | Phase 4 | Pending |
+| ADMN-07 | Phase 4 | Pending |
+| ADMN-08 | Phase 4 | Pending |
+| ADMN-09 | Phase 4 | Pending |
+| ADMN-10 | Phase 4 | Pending |
+| WAST-03 | Phase 4 | Pending |
+| UI-01 | Phase 4 | Pending |
+| UI-02 | Phase 4 | Pending |
+| UI-03 | Phase 4 | Pending |
+| CLNT-01 | Phase 5 | Pending |
+| CLNT-02 | Phase 5 | Pending |
+| CLNT-03 | Phase 5 | Pending |
+| CLNT-04 | Phase 5 | Pending |
+| CLNT-05 | Phase 5 | Pending |
+| CLNT-06 | Phase 5 | Pending |
+| CLNT-07 | Phase 5 | Pending |
+| WAST-04 | Phase 5 | Pending |
+| UI-04 | Phase 5 | Pending |
 
 **Coverage:**
-- v1 需求: 55 total
-- 已映射到 phase: 0
-- 未映射: 55 ⚠️
+- v1 需求: 64 total
+- 已映射到 phase: 64
+- 未映射: 0
 
 ---
 *需求定义: 2026-03-09*
-*最后更新: 2026-03-09 初始定义*
+*最后更新: 2026-03-09 Roadmap 创建，全部需求已映射*
