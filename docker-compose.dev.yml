@@ -1,0 +1,21 @@
+# Start with: docker compose -f docker-compose.dev.yml up -d
+# Encore app: encore run --listen :12345
+
+services:
+  freeswitch:
+    image: drachtio/drachtio-freeswitch-mrf:latest
+    ports:
+      - "5060:5060/udp"   # SIP
+      - "8021:8021/tcp"   # ESL (Event Socket Library)
+    environment:
+      - ESL_PASSWORD=ClueCon
+      - SIP_PORT=5060
+    # Volume mount for custom FreeSWITCH config (uncomment to use):
+    # volumes:
+    #   - ./docker/freeswitch/conf:/etc/freeswitch
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8021"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
