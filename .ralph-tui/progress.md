@@ -10,6 +10,7 @@ after each iteration and it's included in prompts for context.
 - **Encore errs.ErrDetails**: Must implement marker interface with `ErrDetails()` method — a plain struct won't work as the `Details` field type.
 - **No errs.As**: Use standard `errors.As` from the `errors` package instead.
 - **Encore auth handler**: Use `AuthParams` struct with `cookie:"session"`, `header:"Authorization"`, `query:"api_key"` tags for multi-method auth dispatch.
+- **Encore test API calls**: Use package-level generated functions (e.g., `CreateAPIKey(ctx)`) not `svc.Method(ctx)` for `encore:api` endpoints in tests. Direct method calls bypass Encore's request pipeline so `auth.Data()` returns nil. Use `auth.WithContext()` to set up auth context for tests.
 - **Admin login as raw endpoint**: Encore structured endpoints can't set cookies. Use `//encore:api public raw` for admin login to set `Set-Cookie` header directly.
 - **Test unique emails**: Use `time.Now().UnixNano()` in email addresses to avoid unique constraint violations across test runs.
 
@@ -48,4 +49,16 @@ after each iteration and it's included in prompts for context.
   - `testing.AllocsPerRun(0, func(){})` panics with divide by zero — don't use for unique ID generation
   - Admin login must be raw endpoint (`//encore:api public raw`) to set cookies; client login uses structured endpoint
   - Also included `2_create_api_keys.up.sql` migration since auth handler queries `api_keys` table for API key validation
+---
+
+## 2026-03-10 - bd-3it.1.4
+- Created `auth/apikey.go` with 7 API endpoints: CreateAPIKey, ListAPIKeys, ResetAPIKey, RevokeAPIKey, AddIPWhitelist, RemoveIPWhitelist, ListIPWhitelist
+- All endpoints enforce ownership via `verifyKeyOwnership()` with admin role override
+- Keys use crypto/rand (32 bytes) + base64url encoding with "bos_" prefix, stored as SHA-256 hash
+- Added 5 tests: TestAPIKeyCreate, TestAPIKeyListNeverExposesHash, TestAPIKeyReset, TestAPIKeyRevoked, TestIPWhitelist
+- Files changed: `auth/apikey.go` (new), `auth/auth_test.go` (appended tests)
+- **Learnings:**
+  - Must use Encore generated package-level functions (not `svc.Method()`) in tests for `encore:api auth` endpoints — direct method calls bypass request pipeline causing `auth.Data()` to return nil
+  - `auth.WithContext(ctx, uid, data)` properly sets up auth for generated function calls in tests
+  - `validateIPOrCIDR` helper validates both single IPs and CIDR notation using `net.ParseIP` and `net.ParseCIDR`
 ---

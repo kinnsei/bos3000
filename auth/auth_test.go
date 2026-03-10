@@ -3,10 +3,12 @@ package auth
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -203,5 +205,218 @@ func TestInvalidCredentials(t *testing.T) {
 	_, err = svc.ClientLogin(ctx, &ClientLoginRequest{Email: adminEmail, Password: "adminpass"})
 	if err == nil {
 		t.Fatal("expected error for wrong role")
+	}
+}
+
+// --- API Key CRUD Tests ---
+
+func createAuthContext(t *testing.T, userID int64, role string) context.Context {
+	t.Helper()
+	return auth.WithContext(context.Background(), auth.UID(fmt.Sprintf("%d", userID)), &AuthData{
+		UserID:   userID,
+		Role:     role,
+		Username: "testuser_" + role,
+	})
+}
+
+func TestAPIKeyCreate(t *testing.T) {
+	ctx := context.Background()
+
+	email := fmt.Sprintf("apikey-create-%d@test.com", time.Now().UnixNano())
+	userID := createTestUser(t, ctx, email, "pass123", "client")
+
+	authCtx := createAuthContext(t, userID, "client")
+	resp, err := CreateAPIKey(authCtx)
+	if err != nil {
+		t.Fatalf("CreateAPIKey failed: %v", err)
+	}
+
+	if resp.ID == 0 {
+		t.Error("expected non-zero ID")
+	}
+	if !strings.HasPrefix(resp.Key, "bos_") {
+		t.Errorf("expected key to start with bos_, got %s", resp.Key)
+	}
+	if resp.Prefix == "" {
+		t.Error("expected non-empty prefix")
+	}
+	if !strings.HasPrefix(resp.Key, resp.Prefix) {
+		t.Error("key should start with the returned prefix")
+	}
+}
+
+func TestAPIKeyListNeverExposesHash(t *testing.T) {
+	ctx := context.Background()
+
+	email := fmt.Sprintf("apikey-list-%d@test.com", time.Now().UnixNano())
+	userID := createTestUser(t, ctx, email, "pass123", "client")
+
+	authCtx := createAuthContext(t, userID, "client")
+
+	// Create a key first
+	created, err := CreateAPIKey(authCtx)
+	if err != nil {
+		t.Fatalf("CreateAPIKey failed: %v", err)
+	}
+
+	// List keys
+	listResp, err := ListAPIKeys(authCtx)
+	if err != nil {
+		t.Fatalf("ListAPIKeys failed: %v", err)
+	}
+	if len(listResp.Keys) == 0 {
+		t.Fatal("expected at least one key")
+	}
+
+	// Verify no hash or full key in response by marshalling to JSON
+	jsonBytes, _ := json.Marshal(listResp)
+	jsonStr := string(jsonBytes)
+
+	// Compute the hash of the created key
+	hash := sha256.Sum256([]byte(created.Key))
+	keyHash := fmt.Sprintf("%x", hash)
+
+	if strings.Contains(jsonStr, keyHash) {
+		t.Error("list response should not contain key hash")
+	}
+	if strings.Contains(jsonStr, created.Key) {
+		t.Error("list response should not contain full key")
+	}
+
+	// Verify fields are present
+	found := false
+	for _, k := range listResp.Keys {
+		if k.ID == created.ID {
+			found = true
+			if k.Prefix != created.Prefix {
+				t.Errorf("expected prefix %s, got %s", created.Prefix, k.Prefix)
+			}
+			if k.Status != "active" {
+				t.Errorf("expected status active, got %s", k.Status)
+			}
+			if k.CreatedAt.IsZero() {
+				t.Error("expected non-zero created_at")
+			}
+		}
+	}
+	if !found {
+		t.Error("created key not found in list")
+	}
+}
+
+func TestAPIKeyReset(t *testing.T) {
+	ctx := context.Background()
+
+	email := fmt.Sprintf("apikey-reset-%d@test.com", time.Now().UnixNano())
+	userID := createTestUser(t, ctx, email, "pass123", "client")
+
+	authCtx := createAuthContext(t, userID, "client")
+
+	original, err := CreateAPIKey(authCtx)
+	if err != nil {
+		t.Fatalf("CreateAPIKey failed: %v", err)
+	}
+
+	resetResp, err := ResetAPIKey(authCtx, original.ID)
+	if err != nil {
+		t.Fatalf("ResetAPIKey failed: %v", err)
+	}
+
+	if resetResp.Key == original.Key {
+		t.Error("reset key should be different from original")
+	}
+	if !strings.HasPrefix(resetResp.Key, "bos_") {
+		t.Errorf("reset key should start with bos_, got %s", resetResp.Key)
+	}
+	if resetResp.ID != original.ID {
+		t.Errorf("expected same ID %d, got %d", original.ID, resetResp.ID)
+	}
+}
+
+func TestAPIKeyRevoked(t *testing.T) {
+	ctx := context.Background()
+	svc := testService()
+
+	email := fmt.Sprintf("apikey-revoke-%d@test.com", time.Now().UnixNano())
+	userID := createTestUser(t, ctx, email, "pass123", "client")
+
+	authCtx := createAuthContext(t, userID, "client")
+
+	created, err := CreateAPIKey(authCtx)
+	if err != nil {
+		t.Fatalf("CreateAPIKey failed: %v", err)
+	}
+
+	// Verify key works before revocation
+	_, _, err = svc.validateAPIKey(ctx, created.Key)
+	if err != nil {
+		t.Fatalf("API key should be valid before revocation: %v", err)
+	}
+
+	// Revoke it
+	if err := RevokeAPIKey(authCtx, created.ID); err != nil {
+		t.Fatalf("RevokeAPIKey failed: %v", err)
+	}
+
+	// Verify key is rejected after revocation
+	_, _, err = svc.validateAPIKey(ctx, created.Key)
+	if err == nil {
+		t.Fatal("expected error for revoked API key")
+	}
+	if !strings.Contains(err.Error(), "revoked") {
+		t.Errorf("expected revoked error, got: %v", err)
+	}
+}
+
+func TestIPWhitelist(t *testing.T) {
+	ctx := context.Background()
+
+	email := fmt.Sprintf("apikey-ip-%d@test.com", time.Now().UnixNano())
+	userID := createTestUser(t, ctx, email, "pass123", "client")
+
+	authCtx := createAuthContext(t, userID, "client")
+
+	created, err := CreateAPIKey(authCtx)
+	if err != nil {
+		t.Fatalf("CreateAPIKey failed: %v", err)
+	}
+
+	// Add an IP
+	addResp, err := AddIPWhitelist(authCtx, created.ID, &IPRequest{IP: "10.0.0.1"})
+	if err != nil {
+		t.Fatalf("AddIPWhitelist failed: %v", err)
+	}
+	if len(addResp.IPs) != 1 || addResp.IPs[0] != "10.0.0.1" {
+		t.Errorf("expected [10.0.0.1], got %v", addResp.IPs)
+	}
+
+	// List IPs
+	listResp, err := ListIPWhitelist(authCtx, created.ID)
+	if err != nil {
+		t.Fatalf("ListIPWhitelist failed: %v", err)
+	}
+	if len(listResp.IPs) != 1 {
+		t.Errorf("expected 1 IP, got %d", len(listResp.IPs))
+	}
+
+	// Add a CIDR
+	_, err = AddIPWhitelist(authCtx, created.ID, &IPRequest{IP: "192.168.1.0/24"})
+	if err != nil {
+		t.Fatalf("AddIPWhitelist CIDR failed: %v", err)
+	}
+
+	// Remove the first IP
+	removeResp, err := RemoveIPWhitelist(authCtx, created.ID, &IPRequest{IP: "10.0.0.1"})
+	if err != nil {
+		t.Fatalf("RemoveIPWhitelist failed: %v", err)
+	}
+	if len(removeResp.IPs) != 1 || removeResp.IPs[0] != "192.168.1.0/24" {
+		t.Errorf("expected [192.168.1.0/24], got %v", removeResp.IPs)
+	}
+
+	// Verify invalid IP is rejected
+	_, err = AddIPWhitelist(authCtx, created.ID, &IPRequest{IP: "not-an-ip"})
+	if err == nil {
+		t.Fatal("expected error for invalid IP")
 	}
 }
