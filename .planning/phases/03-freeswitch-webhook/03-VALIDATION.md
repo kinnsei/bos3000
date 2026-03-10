@@ -2,7 +2,7 @@
 phase: 3
 slug: freeswitch-webhook
 status: draft
-nyquist_compliant: false
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-03-10
 ---
@@ -38,21 +38,24 @@ created: 2026-03-10
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 03-01-01 | 01 | 1 | FS-01 | unit | `encore test ./callback/fsclient/... -run TestESLFSClientInterface` | ❌ W0 | ⬜ pending |
-| 03-01-02 | 01 | 1 | FS-02 | unit | `encore test ./callback/fsclient/... -run TestEventDispatch` | ❌ W0 | ⬜ pending |
-| 03-01-03 | 01 | 1 | FS-03 | unit | `encore test ./callback/fsclient/... -run TestHealthProbe` | ❌ W0 | ⬜ pending |
-| 03-01-04 | 01 | 1 | FS-04 | unit | `encore test ./callback/fsclient/... -run TestManagerFailover` | ❌ W0 | ⬜ pending |
-| 03-01-05 | 01 | 1 | FS-05 | integration | `encore test ./callback/fsclient/... -run TestFailoverTiming` | ❌ W0 | ⬜ pending |
-| 03-02-01 | 02 | 2 | REC-01 | unit | `encore test ./callback/... -run TestRecordingStartOnBridge` | ❌ W0 | ⬜ pending |
-| 03-02-02 | 02 | 2 | REC-02 | unit | `encore test ./recording/... -run TestFFmpegMerge` | ❌ W0 | ⬜ pending |
-| 03-02-03 | 02 | 2 | REC-03 | integration | `encore test ./recording/... -run TestUploadAndCleanup` | ❌ W0 | ⬜ pending |
-| 03-02-04 | 02 | 2 | REC-04 | unit | `encore test ./recording/... -run TestPresignedURL` | ❌ W0 | ⬜ pending |
-| 03-03-01 | 03 | 2 | HOOK-01 | unit | `encore test ./webhook/... -run TestDeliveryCreation` | ❌ W0 | ⬜ pending |
-| 03-03-02 | 03 | 2 | HOOK-02 | unit | `encore test ./webhook/... -run TestRetryAndDLQ` | ❌ W0 | ⬜ pending |
-| 03-03-03 | 03 | 2 | HOOK-03 | unit | `encore test ./webhook/... -run TestAdminDLQ` | ❌ W0 | ⬜ pending |
-| 03-03-04 | 03 | 2 | HOOK-04 | unit | `encore test ./webhook/... -run TestClientWebhookConfig` | ❌ W0 | ⬜ pending |
+| 03-01-01 | 01 | 1 | FS-01 | unit | `encore test ./callback/fsclient/... -run TestESLFSClientInterface` | W0 | pending |
+| 03-01-02 | 01 | 1 | FS-02 | unit | `encore test ./callback/fsclient/... -run TestEventDispatch` | W0 | pending |
+| 03-01-03 | 01 | 1 | FS-03 | unit | `encore test ./callback/fsclient/... -run TestHealthProbe` | W0 | pending |
+| 03-01-04 | 01 | 1 | FS-04 | unit | `encore test ./callback/fsclient/... -run TestManagerFailover` | W0 | pending |
+| 03-01-05 | 01 | 1 | FS-05 | integration | `encore test ./callback/fsclient/... -run TestFailoverTiming` | W0 | pending |
+| 03-02-01 | 02 | 1 | REC-01 | unit | `encore test ./recording/... -run TestFFmpegMerge` | W0 | pending |
+| 03-02-02 | 02 | 1 | REC-02 | unit | `encore test ./recording/... -run TestMergeValidation` | W0 | pending |
+| 03-02-03 | 02 | 1 | REC-03 | integration | `encore test ./recording/... -run TestUploadAndCleanup` | W0 | pending |
+| 03-02-04 | 02 | 1 | REC-04 | unit | `encore test ./recording/... -run TestPresignedURL` | W0 | pending |
+| 03-03-01 | 03 | 1 | HOOK-01 | unit | `encore test ./webhook/... -run TestDeliveryCreation` | W0 | pending |
+| 03-03-02 | 03 | 1 | HOOK-02 | unit | `encore test ./webhook/... -run TestRetryIntervals` | W0 | pending |
+| 03-03-03 | 03 | 1 | HOOK-03 | unit | `encore test ./webhook/... -run TestAdminDLQ` | W0 | pending |
+| 03-03-04 | 03 | 1 | HOOK-04 | unit | `encore test ./webhook/... -run TestClientWebhookConfig` | W0 | pending |
+| 03-04-01 | 04 | 2 | REC-01 | integration | `encore test ./callback/... -run TestRecordingStartOnBridge` | W0 | pending |
+| 03-04-02 | 04 | 2 | HOOK-01 | integration | `encore test ./callback/... -run TestWebhookPublishOnEachStatusChange` | W0 | pending |
+| 03-04-03 | 04 | 2 | REC-01 | integration | `encore test ./callback/... -run TestRecordingMergePublishOnFinalize` | W0 | pending |
 
-*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+*Status: pending / green / red / flaky*
 
 ---
 
@@ -62,7 +65,10 @@ created: 2026-03-10
 - [ ] `callback/fsclient/manager_test.go` — stubs for FS-03, FS-04, FS-05
 - [ ] `recording/merge_test.go` — stubs for REC-02 (requires ffmpeg in test env)
 - [ ] `recording/recording_test.go` — stubs for REC-03, REC-04
+- [ ] `webhook/sign_test.go` — stubs for HMAC signing
+- [ ] `webhook/retry_test.go` — stubs for exact retry interval validation (30s/1m/5m/15m/1h)
 - [ ] `webhook/webhook_test.go` — stubs for HOOK-01, HOOK-02, HOOK-03, HOOK-04
+- [ ] `callback/statemachine_integration_test.go` — stubs for recording/webhook wiring (Plan 04)
 - [ ] `webhook/migrations/1_create_webhook_deliveries.up.sql` — webhook delivery table
 - [ ] `callback/migrations/3_add_recording_columns.up.sql` — recording columns on callback_calls
 - [ ] `auth/migrations/3_add_webhook_columns.up.sql` — webhook_url/secret on users
@@ -80,16 +86,17 @@ created: 2026-03-10
 | Failover timing < 5s | FS-05 | Requires simulating FS crash in Docker | Stop primary FS container, time until new call routes to standby |
 | Real ffmpeg merge output quality | REC-02 | Audio quality is subjective | Listen to merged MP3, verify stereo separation |
 | Webhook delivery to external URL | HOOK-01 | Requires external HTTP endpoint | Use webhook.site or ngrok to receive and inspect payload |
+| S3 90-day lifecycle policy | REC-03 | Infrastructure-level config (not in code) | Verify lifecycle rule in Encore Cloud dashboard or AWS/GCP console |
 
 ---
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 30s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 30s
+- [x] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** pending
