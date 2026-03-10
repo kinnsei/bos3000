@@ -30,12 +30,14 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. 给定被叫号码，路由引擎可返回正确的 B 路网关（前缀匹配 + 容灾降级）和 A 路网关（加权轮询）
   4. 被叫号码命中黑名单时呼叫被拒绝；所有管理操作写入审计日志；日呼叫量超限返回 429
   5. docker-compose.dev.yml 一键启动开发环境；错误码规范统一实现；启动时校验前缀一致性
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
-- [ ] 01-03: TBD
+- [ ] 01-01-PLAN.md — Shared foundation: error codes, types, docker-compose, port config
+- [ ] 01-02-PLAN.md — Auth service: dual auth handler, login, API Key management
+- [ ] 01-03-PLAN.md — Billing service: balance pre-deduction, rate plans, transactions
+- [ ] 01-04-PLAN.md — Routing service: gateway selection, DID management, health checks
+- [ ] 01-05-PLAN.md — Compliance service: blacklist, audit logging, rate limiting
 
 ### Phase 2: 呼叫引擎（Mock）
 **Goal**: 用户可通过 API 发起回拨，系统通过 Mock FSClient 运行完整的 A/B 双外呼状态机，包括状态查询、强制挂断和损耗自动分类
@@ -111,7 +113,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. 平台基础 | 0/3 | Not started | - |
+| 1. 平台基础 | 0/5 | Planning complete | - |
 | 2. 呼叫引擎（Mock） | 0/2 | Not started | - |
 | 3. FreeSWITCH + 录音 + Webhook | 0/3 | Not started | - |
 | 4. Admin Dashboard | 0/3 | Not started | - |
