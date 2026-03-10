@@ -62,3 +62,15 @@ after each iteration and it's included in prompts for context.
   - `auth.WithContext(ctx, uid, data)` properly sets up auth for generated function calls in tests
   - `validateIPOrCIDR` helper validates both single IPs and CIDR notation using `net.ParseIP` and `net.ParseCIDR`
 ---
+
+## 2026-03-10 - bd-3it.1.5
+- Created billing service with pre-deduction, concurrent slot management, and call finalization
+- Files changed: `billing/billing.go` (new), `billing/balance.go` (new), `billing/billing_test.go` (new), `billing/migrations/1_create_accounts.up.sql` (new), `billing/migrations/2_create_transactions.up.sql` (new)
+- `billing/billing.go`: Service struct, DB (`sqldb.NewDatabase`), Redis cache cluster (`cache.NewCluster`), IntKeyspace for concurrent slots (24h expiry)
+- `billing/balance.go`: 4 private endpoints — PreDeduct (row-level locking with `FOR UPDATE`, 30min pre-deduction), AcquireSlot (Redis INCR with rollback on limit exceeded), ReleaseSlot (Redis DECR floored at 0), Finalize (A-leg 6s blocks, B-leg 60s blocks, refund/charge diff)
+- `billing/billing_test.go`: 6 tests — all passing: PreDeductSufficientBalance, PreDeductInsufficientBalance, PreDeductConcurrentSerializedByRowLock, AcquireSlotUnderLimit, AcquireSlotExceedsLimit, ReleaseSlot
+- **Learnings:**
+  - Encore `cache.IntKeyspace.Set()` returns only `error` (1 value), not `(int64, error)` — unlike `Increment` which returns `(int64, error)`
+  - Encore migrations must be sequentially numbered (1, 2, 3...) — gaps cause errors. Renumbered from spec's 1,3 to 1,2
+  - `cache.NewIntKeyspace[int64]` uses the key type as generic param, not the value type
+---

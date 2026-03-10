@@ -1,0 +1,156 @@
+# Iteration 4 Log
+
+## Metadata
+
+- **Task ID**: bd-3it.1.4
+- **Task Title**: [P01-W2-T02] API Key management and IP whitelist CRUD
+- **Description**: ## Action
+
+Create `auth/migrations/2_create_api_keys.up.sql`:
+```sql
+CREATE TABLE api_keys (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id),
+    prefix VARCHAR(20) NOT ...
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-03-10T09:25:38.564Z
+- **Ended At**: 2026-03-10T09:29:55.837Z
+- **Duration**: 4m 17s
+- **Input Tokens**: 80
+- **Output Tokens**: 15467
+- **Total Tokens**: 15547
+- **Agent**: claude
+- **Model**: claude-opus-4-6
+- **Epic**: bd-3it.1
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+
+
+I'll start by studying the progress file and existing codebase to understand patterns, then implement the API key management feature.
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/.ralph-tui/progress.md[0m
+[94m[Glob][0m pattern: [96mauth/**/*[0m
+Good - the migration already exists from the previous task. Let me read the existing auth files to understand what's in place.
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/auth/auth.go[0m
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/auth/handler.go[0m
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/auth/login.go[0m
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/auth/auth_test.go[0m
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/auth/migrations/2_create_api_keys.up.sql[0m
+Let me check the error codes available.
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/pkg/errcode/codes.go[0m
+Now I have full context. Let me create `auth/apikey.go` with all the CRUD endpoints.
+[94m[Write][0m [95m/Users/kinnsei/ai/bos3000/auth/apikey.go[0m "package auth
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"fmt"
+	"net"
+	"time"
+
+	"encore.dev/beta/auth"
+	"encore.dev/beta/errs"
+
+	"encore.app/pkg/errcode"
+)
+
+// CreateAPIKe... (6932 chars)"
+Now let me add the tests to `auth/auth_test.go`.
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/auth/auth_test.go[0m edit: "import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fm..." → "import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"en..."
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/auth/auth_test.go[0m edit: "	// Wrong role (admin trying client login)
+	adminE..." → "	// Wrong role (admin trying client login)
+	adminE..."
+Let me verify the file compiled correctly.
+[94m[Bash][0m Check for compile errors $ encore check 2>&1 | head -30
+Clean compile. Now let me run the tests.
+[94m[Bash][0m Run API key and IP whitelist tests $ encore test ./auth/... -run "TestAPIKey|TestIPWhitelist" -v 2>&1
+
+[91m[Error: Exit code 1
+=== RUN   TestAPIKeyCreate
+--- FAIL: TestAPIKeyCreate (0.09s)
+panic: runtime error: invalid memory address or nil pointer dereference [recovered, repanicked]
+[signal SIGSEGV: segmentation violation code=0x2 addr=0x0 pc=0x104773d5c]
+
+goroutine 21 [running]:
+testing.tRunner.func1.2({0x104944c60, 0x104ef6020})
+	/opt/homebrew/Cellar/encore/1.54.2/libexec/encore-go/src/testing/testing.go:1884 +0x190
+testing.tRunner.func1()
+	/opt/homebrew/Cellar/encore/1.54.2/libexec/encore-go/src/testing/testing.go:1887 +0x324
+panic({0x104944c60?, 0x104ef6020?})
+	/opt/homebrew/Cellar/encore/1.54.2/libexec/encore-go/src/runtime/panic.go:783 +0x120
+encore.app/auth.(*Service).CreateAPIKey(0x14000102e00?, {0x104a58558, 0x14000288d80})
+	/Users/kinnsei/ai/bos3000/auth/apikey.go:46 +0x13c
+encore.app/auth.TestAPIKeyCreate(0x14000102e00)
+	/Users/kinnsei/ai/bos3000/auth/auth_test.go:230 +0x10c
+testing.tRunner(0x14000102e00, 0x104a48620)
+	/opt/homebrew/Cellar/encore/1.54.2/libexec/encore-go/src/testing/testing.go:1946 +0xd8
+created by testing.(*T).Run in goroutine 1
+	/opt/homebrew/Cellar/encore/1.54.2/libexec/encore-go/src/testing/testing.go:2009 +0x364
+FAIL	encore.app/auth	0.826s
+FAIL
+
+── Test Failure ───────────────────────────────────────────────────────────────────────────[E1000]──
+
+One or more more tests failed.][0m
+The `Data()` function returns nil because `auth.Data()` returns nil in the Encore test context even with `auth.WithContext`. The issue is that `Data()` uses `auth.Data()` which works at request time, but in tests with `auth.WithContext`, it should work. Let me check line 46.
+
+Line 46 is `data := Data()` — `Data()` returns the auth data. The problem is likely that `auth.WithContext` doesn't propagate to `auth.Data()` in Encore's test framework. I need to pass the auth context correctly or use `auth.UserID()` directly.
+
+Let me check how Encore handles this in tests.
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/auth/apikey.go[0m
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/auth/encore.gen.go[0m
+The issue is that calling `svc.CreateAPIKey()` directly bypasses Encore's request pipeline, so `auth.Data()` returns nil. I need to use the generated package-level functions (which Encore compiles to real routing code during `encore test`) with `auth.WithContext`.
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/auth/auth_test.go[0m
+I need to change the tests to use the generated package-level functions instead of `svc.Method()`, since Encore's runtime sets up the auth context correctly for those. But for the revoke test which uses `svc.validateAPIKey` (internal method), I'll keep the direct call.
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/auth/auth_test.go[0m edit: "func TestAPIKeyCreate(t *testing.T) {
+	ctx := cont..." → "func TestAPIKeyCreate(t *testing.T) {
+	ctx := cont..."
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/auth/auth_test.go[0m edit: "func TestAPIKeyListNeverExposesHash(t *testing.T) ..." → "func TestAPIKeyListNeverExposesHash(t *testing.T) ..."
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/auth/auth_test.go[0m edit: "func TestAPIKeyReset(t *testing.T) {
+	ctx := conte..." → "func TestAPIKeyReset(t *testing.T) {
+	ctx := conte..."
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/auth/auth_test.go[0m edit: "func TestAPIKeyRevoked(t *testing.T) {
+	ctx := con..." → "func TestAPIKeyRevoked(t *testing.T) {
+	ctx := con..."
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/auth/auth_test.go[0m edit: "func TestIPWhitelist(t *testing.T) {
+	ctx := conte..." → "func TestIPWhitelist(t *testing.T) {
+	ctx := conte..."
+Now run `encore check` and then the tests.
+[94m[Bash][0m Check for compile errors $ encore check 2>&1 | head -20
+[94m[Bash][0m Run API key and IP whitelist tests $ encore test ./auth/... -run "TestAPIKey|TestIPWhitelist" -v 2>&1
+All 5 tests pass. Let me also run the full auth test suite to make sure nothing is broken.
+[94m[Bash][0m Run all auth tests $ encore test ./auth/... -v 2>&1
+All 10 tests pass (5 existing + 5 new). Now let me close the bead, sync, and update progress.
+[94m[Bash][0m Close the bead $ br close bd-3it.1.4 --reason "API key CRUD + IP whitelist endpoints with ownership checks and admin ...
+[94m[Bash][0m Flush tracker state to JSONL $ br sync --flush-only 2>&1
+Now update progress.md.
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/.ralph-tui/progress.md[0m edit: "- **Encore auth handler**: Use `AuthParams` struct..." → "- **Encore auth handler**: Use `AuthParams` struct..."
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/.ralph-tui/progress.md[0m edit: "  - Also included `2_create_api_keys.up.sql` migra..." → "  - Also included `2_create_api_keys.up.sql` migra..."
+<promise>COMPLETE</promise>
+
+**Summary of what was implemented:**
+
+- **`auth/apikey.go`** — 7 authenticated API endpoints:
+  - `POST /auth/api-keys` — Create key (32-byte crypto/rand, "bos_" prefix, SHA-256 hash stored)
+  - `GET /auth/api-keys` — List keys (never exposes hash or full key)
+  - `POST /auth/api-keys/:id/reset` — Reset key (new key, same ID)
+  - `DELETE /auth/api-keys/:id` — Revoke key (sets status=revoked)
+  - `POST /auth/api-keys/:id/ips` — Add IP/CIDR to whitelist
+  - `DELETE /auth/api-keys/:id/ips` — Remove IP from whitelist
+  - `GET /auth/api-keys/:id/ips` — List IP whitelist
+  - All enforce ownership (`user_id` match) with admin override
+
+- **`auth/auth_test.go`** — 5 new tests all passing:
+  - TestAPIKeyCreate, TestAPIKeyListNeverExposesHash, TestAPIKeyReset, TestAPIKeyRevoked, TestIPWhitelist
