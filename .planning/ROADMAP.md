@@ -84,15 +84,17 @@ Plans:
   3. 管理员可跨用户查询全量话单、监控实时通话并强制挂断；可查看平台损耗趋势、客户损耗排名、B 路失败原因分布
   4. 管理员可进行财务对账（全平台流水、费率模板管理、毛利分析）、DID 号码管理（批量导入/分配）、黑名单管理和审计日志查询
   5. 界面达到商业级水准：shadcn/ui + MagicUI 动效、响应式布局、暗色/亮色主题切换、加载状态优雅
-**Plans**: 6 plans
+**Plans**: 8 plans
 
 Plans:
-- [ ] 04-01-PLAN.md — Project scaffold, layout shell, auth, shared components, test infra
-- [ ] 04-02-PLAN.md — Dashboard overview (stats, alerts, charts) + wastage analysis center
-- [ ] 04-03-PLAN.md — Customer management + gateway management
-- [ ] 04-04-PLAN.md — CDR management (query + live monitoring) + finance center
-- [ ] 04-05-PLAN.md — DID management + compliance (blacklist, audit) + ops monitoring + settings
-- [ ] 04-06-PLAN.md — Visual polish pass + human verification checkpoint
+- [ ] 04-01-PLAN.md — Project scaffold, Vite config, shadcn/ui, Tailwind v4 theme, test infra
+- [ ] 04-02-PLAN.md — App shell (sidebar + topnav), router, auth flow, API layer, shared components
+- [ ] 04-03-PLAN.md — Dashboard overview (stats, alerts, charts) + wastage analysis center
+- [ ] 04-04-PLAN.md — Customer management + gateway management
+- [ ] 04-05-PLAN.md — CDR management (query + live monitoring) + finance center
+- [ ] 04-06-PLAN.md — DID management + compliance (blacklist, audit logs)
+- [ ] 04-07-PLAN.md — Operations monitoring + system settings
+- [ ] 04-08-PLAN.md — Visual polish pass + human verification checkpoint
 
 ### Phase 5: Client Portal
 **Goal**: 客户可通过自助 Web 门户完成日常操作：查看仪表盘、发起回拨、查询话单和损耗、管理财务和 API 集成，并通过 WebSocket 接收实时通话状态推送
@@ -121,5 +123,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 1. 平台基础 | 0/5 | Planning complete | - |
 | 2. 呼叫引擎（Mock） | 0/3 | Planning complete | - |
 | 3. FreeSWITCH + 录音 + Webhook | 0/4 | Planning complete | - |
-| 4. Admin Dashboard | 0/6 | Planning complete | - |
+| 4. Admin Dashboard | 0/8 | Planning complete | - |
 | 5. Client Portal | 0/2 | Not started | - |

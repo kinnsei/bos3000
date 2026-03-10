@@ -18,7 +18,7 @@ created: 2026-03-10
 | Property | Value |
 |----------|-------|
 | **Framework** | Vitest 3.x (Vite-native test runner, jsdom environment) |
-| **Config file** | admin/vitest.config.ts (Wave 0 installs) |
+| **Config file** | admin/vitest.config.ts (Plan 01 installs) |
 | **Quick run command** | `cd admin && npx vitest run --reporter=verbose` |
 | **Full suite command** | `cd admin && npx vitest run --coverage` |
 | **Estimated runtime** | ~15 seconds |
@@ -38,18 +38,22 @@ created: 2026-03-10
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 04-01-01 | 01 | 0 | UI-01, UI-03 | unit | `cd admin && npx vitest run src/app/ -x` | ❌ W0 | ⬜ pending |
-| 04-02-01 | 02 | 1 | ADMN-01 | unit | `cd admin && npx vitest run src/features/dashboard/ -x` | ❌ W0 | ⬜ pending |
-| 04-02-02 | 02 | 1 | UI-02 | unit | `cd admin && npx vitest run src/lib/theme/ -x` | ❌ W0 | ⬜ pending |
-| 04-03-01 | 03 | 2 | ADMN-02 | unit | `cd admin && npx vitest run src/features/customers/ -x` | ❌ W0 | ⬜ pending |
-| 04-03-02 | 03 | 2 | ADMN-03 | unit | `cd admin && npx vitest run src/features/gateways/ -x` | ❌ W0 | ⬜ pending |
-| 04-03-03 | 03 | 2 | ADMN-04 | unit | `cd admin && npx vitest run src/features/cdr/ -x` | ❌ W0 | ⬜ pending |
-| 04-03-04 | 03 | 2 | ADMN-05, WAST-03 | unit | `cd admin && npx vitest run src/features/wastage/ -x` | ❌ W0 | ⬜ pending |
-| 04-03-05 | 03 | 2 | ADMN-06 | unit | `cd admin && npx vitest run src/features/finance/ -x` | ❌ W0 | ⬜ pending |
-| 04-03-06 | 03 | 2 | ADMN-07 | unit | `cd admin && npx vitest run src/components/shared/csv-upload -x` | ❌ W0 | ⬜ pending |
-| 04-03-07 | 03 | 2 | ADMN-08 | unit | `cd admin && npx vitest run src/features/compliance/ -x` | ❌ W0 | ⬜ pending |
-| 04-03-08 | 03 | 2 | ADMN-09 | unit | `cd admin && npx vitest run src/features/ops/ -x` | ❌ W0 | ⬜ pending |
-| 04-03-09 | 03 | 2 | ADMN-10 | unit | `cd admin && npx vitest run src/features/settings/ -x` | ❌ W0 | ⬜ pending |
+| 04-01-01 | 01 | 1 | UI-01, UI-03 | unit | `cd admin && npx tsc --noEmit` | ❌ W0 | ⬜ pending |
+| 04-01-02 | 01 | 1 | UI-01, UI-03 | unit | `cd admin && npx vitest run --reporter=verbose` | ❌ W0 | ⬜ pending |
+| 04-02-01 | 02 | 1 | UI-01, UI-03 | unit | `cd admin && npx tsc --noEmit` | ❌ W0 | ⬜ pending |
+| 04-02-02 | 02 | 1 | UI-01, UI-03 | unit | `cd admin && npx tsc --noEmit && npx vitest run --reporter=verbose` | ❌ W0 | ⬜ pending |
+| 04-03-01 | 03 | 2 | ADMN-01 | unit | `cd admin && npx tsc --noEmit && npx vitest run src/features/dashboard/ -x` | ❌ W0 | ⬜ pending |
+| 04-03-02 | 03 | 2 | ADMN-05, WAST-03, UI-02 | unit | `cd admin && npx tsc --noEmit && npx vitest run src/features/wastage/ -x` | ❌ W0 | ⬜ pending |
+| 04-04-01 | 04 | 2 | ADMN-02 | unit | `cd admin && npx tsc --noEmit && npx vitest run src/features/customers/ -x` | ❌ W0 | ⬜ pending |
+| 04-04-02 | 04 | 2 | ADMN-03 | unit | `cd admin && npx tsc --noEmit && npx vitest run src/features/gateways/ -x` | ❌ W0 | ⬜ pending |
+| 04-05-01 | 05 | 2 | ADMN-04 | unit | `cd admin && npx tsc --noEmit && npx vitest run src/features/cdr/ -x` | ❌ W0 | ⬜ pending |
+| 04-05-02 | 05 | 2 | ADMN-06 | unit | `cd admin && npx tsc --noEmit && npx vitest run src/features/finance/ -x` | ❌ W0 | ⬜ pending |
+| 04-06-01 | 06 | 2 | ADMN-07 | unit | `cd admin && npx tsc --noEmit && npx vitest run src/features/did/ -x` | ❌ W0 | ⬜ pending |
+| 04-06-02 | 06 | 2 | ADMN-08 | unit | `cd admin && npx tsc --noEmit && npx vitest run src/features/compliance/ -x` | ❌ W0 | ⬜ pending |
+| 04-07-01 | 07 | 2 | ADMN-09 | unit | `cd admin && npx tsc --noEmit && npx vitest run src/features/ops/ -x` | ❌ W0 | ⬜ pending |
+| 04-07-02 | 07 | 2 | ADMN-10 | unit | `cd admin && npx tsc --noEmit && npx vitest run src/features/settings/ -x` | ❌ W0 | ⬜ pending |
+| 04-08-01 | 08 | 3 | UI-01, UI-03 | integration | `cd admin && npx tsc --noEmit && npx vitest run --reporter=verbose` | ❌ W0 | ⬜ pending |
+| 04-08-02 | 08 | 3 | UI-01, UI-03 | manual | Human visual verification | N/A | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
