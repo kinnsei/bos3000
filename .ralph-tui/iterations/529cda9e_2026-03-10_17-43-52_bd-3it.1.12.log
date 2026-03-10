@@ -1,0 +1,179 @@
+# Iteration 8 Log
+
+## Metadata
+
+- **Task ID**: bd-3it.1.12
+- **Task Title**: [P01-W2-T01] Blacklist checking and CRUD, daily rate limiting
+- **Description**: ## Action
+
+Create `compliance/migrations/1_create_blacklist.up.sql`:
+```sql
+CREATE TABLE blacklisted_numbers (
+    id BIGSERIAL PRIMARY KEY,
+    number VARCHAR(20) NOT NULL,
+    user_id BIGINT,
+    re...
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-03-10T09:43:52.465Z
+- **Ended At**: 2026-03-10T09:46:56.792Z
+- **Duration**: 3m 4s
+- **Input Tokens**: 82
+- **Output Tokens**: 9961
+- **Total Tokens**: 10043
+- **Agent**: claude
+- **Model**: claude-opus-4-6
+- **Epic**: bd-3it.1
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+Let me study the progress file and existing codebase patterns first.
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/.ralph-tui/progress.md[0m
+[94m[Glob][0m pattern: [96mcompliance/**/*[0m
+[94m[Bash][0m List project root $ ls /Users/kinnsei/ai/bos3000/
+No compliance directory yet. Let me look at existing services for patterns.
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/billing/billing.go[0m
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/pkg/errcode/codes.go[0m
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/auth/auth.go[0m
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/go.mod[0m
+Let me also check existing test patterns.
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/billing/billing_test.go[0m
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/billing/balance.go[0m
+Good, I have a clear picture of the patterns. Let me implement the compliance service.
+[94m[TodoWrite][0m
+
+[91m[Error: <tool_use_error>InputValidationError: TodoWrite failed due to the following issue:
+The parameter `todos` type is expected as `array` but provided as `string`</tool_use_error>][0m
+[94m[Bash][0m Create compliance directories $ mkdir -p /Users/kinnsei/ai/bos3000/compliance/migrations
+[94m[ToolSearch][0m query: [93mselect:TodoWrite[0m
+Now let me create all the compliance service files.
+[94m[Write][0m [95m/Users/kinnsei/ai/bos3000/compliance/migrations/1_create_blacklist.up.sql[0m "CREATE TABLE blacklisted_numbers (
+    id BIGSERIAL PRIMARY KEY,
+    number VARCHAR(20) NOT NULL,
+    user_id BIGINT,
+    reason TEXT,
+    created_by BIGINT NOT NULL,
+    created_at TIMESTAMPTZ NOT NU... (400 chars)"
+[94m[Write][0m [95m/Users/kinnsei/ai/bos3000/compliance/compliance.go[0m "package compliance
+
+import (
+	"encore.dev/storage/cache"
+	"encore.dev/storage/sqldb"
+)
+
+var db = sqldb.NewDatabase("compliance", sqldb.DatabaseConfig{
+	Migrations: "./migrations",
+})
+
+var complianceCa... (402 chars)"
+[94m[Write][0m [95m/Users/kinnsei/ai/bos3000/compliance/blacklist.go[0m "package compliance
+
+import (
+	"context"
+	"fmt"
+	"strconv"
+
+	"encore.dev/beta/errs"
+
+	authpkg "encore.app/auth"
+	"encore.app/pkg/errcode"
+)
+
+// CheckBlacklistParams contains the parameters for checking... (6035 chars)"
+[94m[Write][0m [95m/Users/kinnsei/ai/bos3000/compliance/ratelimit.go[0m "package compliance
+
+import (
+	"context"
+	"time"
+
+	"encore.dev/beta/errs"
+	"encore.dev/rlog"
+	"encore.dev/storage/cache"
+
+	"encore.app/pkg/errcode"
+)
+
+// DailyCallKey is the cache key for daily call co... (1949 chars)"
+[94m[Write][0m [95m/Users/kinnsei/ai/bos3000/compliance/compliance_test.go[0m "package compliance
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"testing"
+	"time"
+
+	"encore.dev/beta/auth"
+	"encore.dev/beta/errs"
+
+	authpkg "encore.app/auth"
+	"encore.app/pkg/errcode"
+)
+
+func adminCtx() co... (6965 chars)"
+The "unused" warnings are expected since Encore uses these via annotations at compile time. Let me run the tests.
+[94m[Bash][0m Run compliance tests $ encore test ./compliance/... -run "TestBlacklist|TestDailyLimit|TestAdd" -v 2>&1
+
+[91m[Error: Exit code 1
+
+── Invalid request type ───────────────────────────────────────────────────────────────────[E1361]──
+
+API request parameters of type *int64 are not supported in query strings. You can only use built-in
+types, or slices of built-in types such as strings, booleans, int, time.Time.
+
+     ╭─[ /Users/kinnsei/ai/bos3000/compliance/blacklist.go:128:13 ]
+     │
+ 126 │ // ListBlacklistParams contains the query parameters for listing blacklist entries.
+ 127 │ type ListBlacklistParams struct {
+ 128 │     UserID     *int64 `query:"user_id"`
+     ⋮                ──┬───
+     ⋮                  ╰─ unsupported type
+     · 
+     · 
+ 146 │ // ListBlacklist lists blacklist entries. Admins see all; clients see own + global.
+ 147 │ //
+ 148 │ //encore:api auth method=GET path=/compliance/blacklist
+     ⋮                   ────┬─────
+     ⋮                       ╰─ you could change this to a POST or PUT request
+ 149 │ func (s *Service) ListBlacklist(ctx context.Context, p *ListBlacklistParams) (*ListBlacklistResponse, error) {
+     ⋮                                                      ──────────┬───────────
+     ⋮                                                                ╰─ used here
+ 150 │     ad := authpkg.Data()
+ 151 │     if ad == nil {
+─────╯
+
+APIs which are sent as GET, HEAD or DELETE requests are unable to contain JSON bodies, thus all
+parameters must be sent as query strings or headers. See
+https://encore.dev/docs/develop/api-schemas#supported-types for more information.][0m
+Two issues: `*int64` not supported in query strings for GET, and tests need to use Encore-generated functions (not direct calls). Let me fix both.
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/compliance/blacklist.go[0m edit: "// ListBlacklistParams contains the query paramete..." → "// ListBlacklistParams contains the query paramete..."
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/compliance/blacklist.go[0m edit: "	if ad.Role == "admin" {
+		if p.GlobalOnly {
+			qu..." → "	if ad.Role == "admin" {
+		if p.GlobalOnly {
+			qu..."
+Now I need to check how Encore generates the package-level functions. Looking at the billing test pattern, they call `PreDeduct(ctx, ...)` directly — but the error says "undefined: CheckBlacklist". This is because Encore generates these at build time. Let me check what pattern the billing tests actually use.
+[94m[Bash][0m Test with encore to see generated functions $ encore test ./compliance/... -run "TestBlacklistGlobalHit" -v 2>&1 | head -40
+It works! Encore generates those functions at build time. Let me run the full test suite now.
+[94m[Bash][0m Run all compliance tests $ encore test ./compliance/... -run "TestBlacklist|TestDailyLimit|TestAdd" -v 2>&1
+All 8 tests pass. Now let me close the bead and update progress.
+[94m[Bash][0m Close the bead $ br close bd-3it.1.12 --reason "Compliance service with blacklist CRUD, check-blacklist (global then ...
+[94m[Bash][0m Flush tracker state to JSONL $ br sync --flush-only
+Now update progress.md.
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/.ralph-tui/progress.md[0m edit: "  - Dynamic SQL query building with `strconv.Itoa(..." → "  - Dynamic SQL query building with `strconv.Itoa(..."
+All done. Here's a summary:
+
+**Created 5 files:**
+- `compliance/migrations/1_create_blacklist.up.sql` — blacklisted_numbers table with `UNIQUE NULLS NOT DISTINCT` constraint
+- `compliance/compliance.go` — Service struct, DB, Redis cache cluster
+- `compliance/blacklist.go` — CheckBlacklist (global→client check), AddBlacklist, RemoveBlacklist, ListBlacklist with permission enforcement
+- `compliance/ratelimit.go` — CheckDailyLimit with Redis IntKeyspace, optimistic increment, rollback on exceeded, fail-open on cache errors
+- `compliance/compliance_test.go` — 8 tests (all passing)
+
+**Key design decisions:**
+- `ListBlacklistParams.UserID` uses `int64` (0 = no filter) since Encore GET endpoints don't support pointer types in query strings
+- CheckBlacklist checks global first, then client-level — global cannot be overridden
+- Daily limit uses optimistic increment + rollback pattern; returns `CurrentCount: -1` on cache failure (fail-open)
+
+<promise>COMPLETE</promise>

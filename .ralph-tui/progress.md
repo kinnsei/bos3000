@@ -13,6 +13,7 @@ after each iteration and it's included in prompts for context.
 - **Encore test API calls**: Use package-level generated functions (e.g., `CreateAPIKey(ctx)`) not `svc.Method(ctx)` for `encore:api` endpoints in tests. Direct method calls bypass Encore's request pipeline so `auth.Data()` returns nil. Use `auth.WithContext()` to set up auth context for tests.
 - **Encore path params**: Path parameters (`:id`, `:prefix`) must be separate function parameters, not struct fields. For endpoints with path params + body: `func (s *Service) Foo(ctx context.Context, id int64, p *Params)`. Use `authpkg.Data()` (import alias) to check roles cross-service.
 - **No `sqldb.ErrNoRows.Is()`**: Use `errors.Is(err, sqldb.ErrNoRows)` — the sentinel error has no `.Is()` method.
+- **Encore test helpers**: Import `"encore.dev/et"` (NOT `"encore.dev/test"`). Use `et.Topic(topic).PublishedMessages()` for Pub/Sub test assertions.
 - **Admin login as raw endpoint**: Encore structured endpoints can't set cookies. Use `//encore:api public raw` for admin login to set `Set-Cookie` header directly.
 - **Test unique emails**: Use `time.Now().UnixNano()` in email addresses to avoid unique constraint violations across test runs.
 
@@ -114,4 +115,16 @@ after each iteration and it's included in prompts for context.
   - Encore GET endpoints don't support `*int64` in query params — use `int64` with 0 as sentinel instead
   - `UNIQUE NULLS NOT DISTINCT (number, user_id)` works in PG 15+ for treating NULL=NULL in unique constraints
   - `cache.NewIntKeyspace` Increment returns `(int64, error)` — can use negative increment (-1) for decrement
+---
+
+## 2026-03-10 - bd-3it.1.13
+- Created async audit logging via Pub/Sub with `AuditEvents` topic and `write-audit-log` subscription
+- `PublishAuditEvent` (private POST) for other services to record audit events asynchronously
+- `QueryAuditLogs` (auth GET, admin-only) with filters (operator_id, action, resource_type, date_from, date_to) and pagination
+- `CleanupAuditLogs` cron job at 3am UTC daily, deletes records older than 90 days
+- Files changed: `compliance/audit.go` (new), `compliance/migrations/2_create_audit_logs.up.sql` (new), `compliance/compliance_test.go` (appended 3 tests)
+- **Learnings:**
+  - Encore `et.Topic(topic).PublishedMessages()` works for verifying Pub/Sub publishes in tests — import `"encore.dev/et"` (not `"encore.dev/test"`)
+  - `TIMESTAMPTZ` columns must be scanned as `time.Time`, not `string`
+  - `db.Exec` returns a result with `RowsAffected()` method (int64) for counting affected rows
 ---
