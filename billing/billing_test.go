@@ -548,6 +548,182 @@ func TestResolveRateNoRateFound(t *testing.T) {
 	}
 }
 
+// --- Admin Billing Operation Tests ---
+
+func TestTopup(t *testing.T) {
+	ctx := adminCtx(t)
+	bgCtx := context.Background()
+	userID := createTestAccount(t, bgCtx, 10000, 0, 10)
+
+	resp, err := Topup(ctx, userID, &TopupParams{
+		Amount: 5000, Description: "test topup",
+	})
+	if err != nil {
+		t.Fatalf("Topup failed: %v", err)
+	}
+	if resp.Balance != 15000 {
+		t.Errorf("expected balance 15000, got %d", resp.Balance)
+	}
+	if resp.TxID == 0 {
+		t.Error("expected non-zero TxID")
+	}
+
+	balance := getBalance(t, bgCtx, userID)
+	if balance != 15000 {
+		t.Errorf("expected DB balance 15000, got %d", balance)
+	}
+}
+
+func TestDeduct(t *testing.T) {
+	ctx := adminCtx(t)
+	bgCtx := context.Background()
+	userID := createTestAccount(t, bgCtx, 20000, 0, 10)
+
+	resp, err := Deduct(ctx, userID, &DeductParams{
+		Amount: 3000, Description: "test deduction",
+	})
+	if err != nil {
+		t.Fatalf("Deduct failed: %v", err)
+	}
+	if resp.Balance != 17000 {
+		t.Errorf("expected balance 17000, got %d", resp.Balance)
+	}
+
+	balance := getBalance(t, bgCtx, userID)
+	if balance != 17000 {
+		t.Errorf("expected DB balance 17000, got %d", balance)
+	}
+}
+
+func TestGetAccountOwnershipEnforced(t *testing.T) {
+	bgCtx := context.Background()
+	userID := createTestAccount(t, bgCtx, 50000, 1000, 5)
+
+	// Admin can view any account
+	adminContext := adminCtx(t)
+	resp, err := GetAccount(adminContext, userID)
+	if err != nil {
+		t.Fatalf("admin GetAccount failed: %v", err)
+	}
+	if resp.UserID != userID {
+		t.Errorf("expected user_id %d, got %d", userID, resp.UserID)
+	}
+	if resp.Balance != 50000 {
+		t.Errorf("expected balance 50000, got %d", resp.Balance)
+	}
+	if resp.CreditLimit != 1000 {
+		t.Errorf("expected credit_limit 1000, got %d", resp.CreditLimit)
+	}
+	if resp.MaxConcurrent != 5 {
+		t.Errorf("expected max_concurrent 5, got %d", resp.MaxConcurrent)
+	}
+	if resp.Status != "active" {
+		t.Errorf("expected status 'active', got %s", resp.Status)
+	}
+
+	// Client accessing different user's account should fail
+	clientContext := clientCtx(t) // userID=2
+	_, err = GetAccount(clientContext, userID)
+	if err == nil {
+		t.Fatal("expected PermissionDenied for client accessing other's account, got nil")
+	}
+	var errResp *errs.Error
+	if !errors.As(err, &errResp) {
+		t.Fatalf("expected *errs.Error, got %T", err)
+	}
+	if errResp.Code != errs.PermissionDenied {
+		t.Errorf("expected PermissionDenied, got %v", errResp.Code)
+	}
+}
+
+func TestListTransactionsPagination(t *testing.T) {
+	ctx := adminCtx(t)
+	bgCtx := context.Background()
+	userID := createTestAccount(t, bgCtx, 100000, 0, 10)
+
+	// Create several transactions via topup
+	for i := range 5 {
+		_, err := Topup(ctx, userID, &TopupParams{
+			Amount:      1000,
+			Description: fmt.Sprintf("topup %d", i),
+		})
+		if err != nil {
+			t.Fatalf("Topup %d failed: %v", i, err)
+		}
+	}
+
+	// List first page (size 2)
+	resp, err := ListTransactions(ctx, userID, &ListTransactionsParams{
+		Page: 1, PageSize: 2,
+	})
+	if err != nil {
+		t.Fatalf("ListTransactions failed: %v", err)
+	}
+	if resp.Total != 5 {
+		t.Errorf("expected total 5, got %d", resp.Total)
+	}
+	if len(resp.Transactions) != 2 {
+		t.Errorf("expected 2 transactions on page 1, got %d", len(resp.Transactions))
+	}
+	if resp.Page != 1 {
+		t.Errorf("expected page 1, got %d", resp.Page)
+	}
+
+	// List with type filter
+	resp, err = ListTransactions(ctx, userID, &ListTransactionsParams{
+		Page: 1, PageSize: 10, Type: "topup",
+	})
+	if err != nil {
+		t.Fatalf("ListTransactions with type filter failed: %v", err)
+	}
+	if resp.Total != 5 {
+		t.Errorf("expected 5 topup transactions, got %d", resp.Total)
+	}
+	for _, tx := range resp.Transactions {
+		if tx.Type != "topup" {
+			t.Errorf("expected type 'topup', got %s", tx.Type)
+		}
+	}
+}
+
+func TestCreateAccount(t *testing.T) {
+	ctx := adminCtx(t)
+	newUserID := time.Now().UnixNano()
+
+	resp, err := CreateAccount(ctx, &CreateAccountParams{
+		UserID:        newUserID,
+		CreditLimit:   5000,
+		MaxConcurrent: 3,
+	})
+	if err != nil {
+		t.Fatalf("CreateAccount failed: %v", err)
+	}
+	if resp.UserID != newUserID {
+		t.Errorf("expected user_id %d, got %d", newUserID, resp.UserID)
+	}
+	if resp.Balance != 0 {
+		t.Errorf("expected balance 0, got %d", resp.Balance)
+	}
+	if resp.CreditLimit != 5000 {
+		t.Errorf("expected credit_limit 5000, got %d", resp.CreditLimit)
+	}
+	if resp.MaxConcurrent != 3 {
+		t.Errorf("expected max_concurrent 3, got %d", resp.MaxConcurrent)
+	}
+	if resp.Status != "active" {
+		t.Errorf("expected status 'active', got %s", resp.Status)
+	}
+
+	// Client should not be able to create accounts
+	clientContext := clientCtx(t)
+	_, err = CreateAccount(clientContext, &CreateAccountParams{
+		UserID: time.Now().UnixNano(), CreditLimit: 1000, MaxConcurrent: 1,
+	})
+	if err == nil {
+		t.Fatal("expected PermissionDenied for client creating account, got nil")
+	}
+}
+
 func TestAdminOnlyRatePlanAccess(t *testing.T) {
 	ctx := clientCtx(t)
 

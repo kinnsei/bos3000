@@ -88,3 +88,17 @@ after each iteration and it's included in prompts for context.
   - Cross-service auth checking: import auth package with alias (`authpkg "encore.app/auth"`) and use `authpkg.Data()` to access `AuthData` struct
   - `scanRatePlan` helper with `interface{ Scan(...any) error }` works for both `QueryRow` and `Rows.Next()` scanning
 ---
+
+## 2026-03-10 - bd-3it.1.7
+- Added 5 admin billing endpoints: Topup, Deduct, GetAccount, ListTransactions, CreateAccount
+- Added migration `4_add_account_status.up.sql` for status column (active/suspended/closed)
+- Topup/Deduct: admin-only, row-level locking, transaction recording
+- GetAccount: ownership-enforced (admin: any user, client: own only), returns balance/credit_limit/max_concurrent/rate_plan_id/status
+- ListTransactions: paginated with type/date_from/date_to filters, ownership-enforced
+- CreateAccount: admin-only, explicit workflow for creating billing accounts with initial config
+- Added 5 tests: TestTopup, TestDeduct, TestGetAccountOwnershipEnforced, TestListTransactionsPagination, TestCreateAccount
+- Files changed: `billing/balance.go`, `billing/billing_test.go`, `billing/migrations/4_add_account_status.up.sql` (new)
+- **Learnings:**
+  - Dynamic SQL query building with `strconv.Itoa(argIdx)` for parameterized filters works well with Encore's sqldb
+  - Go 1.22+ `max()` builtin preferred over `if` for defaulting page numbers
+---

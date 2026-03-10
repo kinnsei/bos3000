@@ -1,0 +1,466 @@
+# Iteration 6 Log
+
+## Metadata
+
+- **Task ID**: bd-3it.1.6
+- **Task Title**: [P01-W2-T02] Finalize billing and rate plan CRUD with multi-tier resolution
+- **Description**: ## Action
+
+Create `billing/migrations/2_create_rate_plans.up.sql`:
+```sql
+CREATE TABLE rate_plans (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    mode VARCHAR(20) NOT NULL DEFAULT ...
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-03-10T09:33:49.585Z
+- **Ended At**: 2026-03-10T09:40:31.921Z
+- **Duration**: 6m 42s
+- **Input Tokens**: 140
+- **Output Tokens**: 24161
+- **Total Tokens**: 24301
+- **Agent**: claude
+- **Model**: claude-opus-4-6
+- **Epic**: bd-3it.1
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+Let me study the progress file and existing billing code first.
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/.ralph-tui/progress.md[0m
+[94m[Glob][0m pattern: [96mbilling/**/*[0m
+Migration 2 already exists for transactions. I need to read the existing files to understand the schema and patterns.
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/billing/billing.go[0m
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/billing/balance.go[0m
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/billing/billing_test.go[0m
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/billing/migrations/1_create_accounts.up.sql[0m
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/billing/migrations/2_create_transactions.up.sql[0m
+Now let me check the auth service for patterns and the errcode package.
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/pkg/errcode/codes.go[0m
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/pkg/types/types.go[0m
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/auth/apikey.go[0m
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/auth/auth.go[0m
+[94m[ToolSearch][0m query: [93mselect:TodoWrite[0m
+[94m[TodoWrite][0m
+[94m[Write][0m [95m/Users/kinnsei/ai/bos3000/billing/migrations/3_create_rate_plans.up.sql[0m "CREATE TABLE rate_plans (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    mode VARCHAR(20) NOT NULL DEFAULT 'uniform' CHECK (mode IN ('uniform', 'prefix')),
+    uniform_a_rate BIGINT... (701 chars)"
+[94m[TodoWrite][0m
+[94m[Write][0m [95m/Users/kinnsei/ai/bos3000/billing/rates.go[0m "package billing
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"encore.dev/beta/auth"
+	"encore.dev/beta/errs"
+	"encore.dev/storage/sqldb"
+
+	"encore.app/pkg/errcode"
+	"encore.app/pkg/types"
+)
+
+func requireAdmin... (12154 chars)"
+I need to fix the `ErrNoRows` check pattern. Let me use `errors.Is` instead.
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/billing/rates.go[0m
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/billing/rates.go[0m edit: "import (
+	"context"
+	"fmt"
+	"time"
+
+	"encore.dev/b..." → "import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"en..."
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/billing/rates.go[0m edit: "		if sqldb.ErrNoRows.Is(err) {
+			return nil, &err..." → "		if errors.Is(err, sqldb.ErrNoRows) {
+			return n..."
+Wait, there are two more instances. Let me fix them.
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/billing/rates.go[0m edit: "sqldb.ErrNoRows.Is(err)" → "errors.Is(err, sqldb.ErrNoRows)"
+Now let me also check - the `authData` type I defined needs to match what `auth.Data()` returns. Looking at the auth service, `auth.Data()` returns `*AuthData` from the auth package. Let me check how the billing service should access this.
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/auth/handler.go[0m
+The auth handler returns `*AuthData`. In the billing service, `auth.Data()` will return `any` which I need to type-assert to `*auth.AuthData` from the auth package. But the progress notes say we need to import auth package properly. Let me check how auth data is accessed cross-service.
+
+Actually, looking at the progress notes: "Use `auth.WithContext()` to set up auth context for tests" and the auth package's `AuthData` struct is what gets returned. In Encore, `auth.Data()` from `encore.dev/beta/auth` returns the auth data as `any`, so I should type-assert it to `*authpkg.AuthData` where `authpkg` is `encore.app/auth`.
+
+Let me fix the `requireAdmin` function:
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/billing/rates.go[0m edit: "	"encore.dev/beta/auth"
+	"encore.dev/beta/errs"
+	"..." → "	"encore.dev/beta/errs"
+	"encore.dev/storage/sqldb..."
+
+[91m[Error: <tool_use_error>File has not been read yet. Read it first before writing to it.</tool_use_error>][0m
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/billing/rates.go[0m
+Now I need to fix the `requireAdmin` to use the auth package's `Data()` helper properly. The auth package exports a `Data()` function that returns `*AuthData`.
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/billing/rates.go[0m edit: "	"encore.dev/beta/auth"
+	"encore.dev/beta/errs"
+	"..." → "	"encore.dev/beta/errs"
+	"encore.dev/storage/sqldb..."
+Now let me write the tests. I need to append to billing_test.go.
+[94m[TodoWrite][0m
+I need to check what the auth test pattern looks like for importing auth context in billing tests.
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/auth/auth_test.go[0m
+[94m[Grep][0m [95m/Users/kinnsei/ai/bos3000[0m pattern: [96mauth\.WithContext[0m
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/auth/auth_test.go[0m
+Good. Now I understand the pattern. For billing tests with `auth` endpoints, I need to use `auth.WithContext` with the auth package's `AuthData` type. Let me write the tests.
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/billing/billing_test.go[0m edit: "import (
+	"context"
+	"fmt"
+	"sync"
+	"testing"
+	"ti..." → "import (
+	"context"
+	"fmt"
+	"sync"
+	"testing"
+	"ti..."
+Now append the tests at the end of the file:
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/billing/billing_test.go[0m edit: "	if acqResp.CurrentSlots != 2 {
+		t.Errorf("expect..." → "	if acqResp.CurrentSlots != 2 {
+		t.Errorf("expect..."
+I need to fix `errs.As` — per progress notes, it doesn't exist. Must use `errors.As`.
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/billing/billing_test.go[0m
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/billing/billing_test.go[0m edit: "import (
+	"context"
+	"fmt"
+	"sync"
+	"testing"
+	"ti..." → "import (
+	"context"
+	"errors"
+	"fmt"
+	"sync"
+	"tes..."
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/billing/billing_test.go[0m edit: "errs.As(err, &errResp)" → "errors.As(err, &errResp)"
+The "undefined" errors are expected — Encore generates these wrapper functions during `encore test`. The "imported and not used" diagnostics are from the regular Go compiler, but Encore's build process will use them. Let me run the tests now.
+[94m[TodoWrite][0m
+[94m[Bash][0m Run billing tests for finalize, rate plans, and resolve $ encore test ./billing/... -run "TestFinalize|TestCreate|TestResolve|TestAdmin" -v 2>&1
+
+[91m[Error: Exit code 1
+
+── Invalid API Function ───────────────────────────────────────────────────────────────────[E1384]──
+
+Unexpected parameter name "p" expected "id" (to match path parameter ":id").
+
+     ╭─[ /Users/kinnsei/ai/bos3000/billing/rates.go:112:55 ]
+     │
+ 110 │ // UpdateRatePlan updates an existing rate plan (admin only).
+ 111 │ //
+ 112 │ //encore:api auth method=PUT path=/billing/rate-plans/:id
+     ⋮                                                       ───
+ 113 │ func (s *Service) UpdateRatePlan(ctx context.Context, p *UpdateRatePlanParams) (*RatePlanResponse, error) {
+     ⋮                                                       ───────────────────────
+ 114 │     if err := requireAdmin(); err != nil {
+ 115 │         return nil, err
+─────╯
+
+hint: valid signatures are:
+	- func(context.Context) error
+	- func(context.Context) (*ResponseData, error)
+	- func(context.Context, *RequestData) error
+	- func(context.Context, *RequestType) (*ResponseData, error)
+
+For more information on how to use APIs, see https://encore.dev/docs/primitives/apis
+
+
+
+── Invalid API Function ───────────────────────────────────────────────────────────────────[E1386]──
+
+Path parameter "p" must be a string, bool, integer, or encore.dev/types/uuid.UUID.
+
+     ╭─[ /Users/kinnsei/ai/bos3000/billing/rates.go:112:55 ]
+     │
+ 110 │ // UpdateRatePlan updates an existing rate plan (admin only).
+ 111 │ //
+ 112 │ //encore:api auth method=PUT path=/billing/rate-plans/:id
+     ⋮                                                       ───
+ 113 │ func (s *Service) UpdateRatePlan(ctx context.Context, p *UpdateRatePlanParams) (*RatePlanResponse, error) {
+     ⋮                                                       ───────────────────────
+ 114 │     if err := requireAdmin(); err != nil {
+ 115 │         return nil, err
+─────╯
+
+hint: valid signatures are:
+	- func(context.Context) error
+	- func(context.Context) (*ResponseData, error)
+	- func(context.Context, *RequestData) error
+	- func(context.Context, *RequestType) (*ResponseData, error)
+
+For more information on how to use APIs, see https://encore.dev/docs/primitives/apis
+
+
+
+── Invalid API Function ───────────────────────────────────────────────────────────────────[E1384]──
+
+Unexpected parameter name "p" expected "id" (to match path parameter ":id").
+
+     ╭─[ /Users/kinnsei/ai/bos3000/billing/rates.go:202:55 ]
+     │
+ 200 │ // GetRatePlan gets a single rate plan by ID (admin only).
+ 201 │ //
+ 202 │ //encore:api auth method=GET path=/billing/rate-plans/:id
+     ⋮                                                       ───
+ 203 │ func (s *Service) GetRatePlan(ctx context.Context, p *GetRatePlanParams) (*RatePlanResponse, error) {
+     ⋮                                                    ────────────────────
+ 204 │     if err := requireAdmin(); err != nil {
+ 205 │         return nil, err
+─────╯
+
+hint: valid signatures are:
+	- func(context.Context) error
+	- func(context.Context) (*ResponseData, error)
+	- func(context.Context, *RequestData) error
+	- func(context.Context, *RequestType) (*ResponseData, error)
+
+For more information on how to use APIs, see https://encore.dev/docs/primitives/apis
+
+
+
+── Invalid API Function ───────────────────────────────────────────────────────────────────[E1386]──
+
+Path parameter "p" must be a string, bool, integer, or encore.dev/types/uuid.UUID.
+
+     ╭─[ /Users/kinnsei/ai/bos3000/billing/rates.go:202:55 ]
+     │
+ 200 │ // GetRatePlan gets a single rate plan by ID (admin only).
+ 201 │ //
+ 202 │ //encore:api auth method=GET path=/billing/rate-plans/:id
+     ⋮                                                       ───
+ 203 │ func (s *Service) GetRatePlan(ctx context.Context, p *GetRatePlanParams) (*RatePlanResponse, error) {
+     ⋮                                                    ────────────────────
+ 204 │     if err := requireAdmin(); err != nil {
+ 205 │         return nil, err
+─────╯
+
+hint: valid signatures are:
+	- func(context.Context) error
+	- func(context.Context) (*ResponseData, error)
+	- func(context.Context, *RequestData) error
+	- func(context.Context, *RequestType) (*ResponseData, error)
+
+For more information on how to use APIs, see https://encore.dev/docs/primitives/apis
+
+
+
+── Invalid API Function ───────────────────────────────────────────────────────────────────[E1384]──
+
+Unexpected parameter name "p" expected "id" (to match path parameter ":id").
+
+     ╭─[ /Users/kinnsei/ai/bos3000/billing/rates.go:253:56 ]
+     │
+ 251 │ // AddPrefixRate adds a prefix rate entry to a rate plan (admin only).
+ 252 │ //
+ 253 │ //encore:api auth method=POST path=/billing/rate-plans/:id/prefixes
+     ⋮                                                        ───
+ 254 │ func (s *Service) AddPrefixRate(ctx context.Context, p *AddPrefixRateParams) (*PrefixRateResponse, error) {
+     ⋮                                                      ──────────────────────
+ 255 │     if err := requireAdmin(); err != nil {
+ 256 │         return nil, err
+─────╯
+
+hint: valid signatures are:
+	- func(context.C
+
+... [9695 characters truncated] ...
+
+_at
+ 212 │ │           FROM rate_plans WHERE id=$1
+ 213 │ │       `, p.ID).Scan(
+ 214 │ │           &resp.ID, &resp.Name, &resp.Mode, &ua, &ub,
+ 215 │ │           &resp.Description, &resp.CreatedAt, &resp.UpdatedAt,
+ 216 │ │       )
+ 217 │ │       if err != nil {
+ 218 │ │           if errors.Is(err, sqldb.ErrNoRows) {
+ 219 │ │               return nil, &errs.Error{Code: errs.NotFound, Message: "rate plan not found"}
+ 220 │ │           }
+ 221 │ │           return nil, fmt.Errorf("get rate plan: %w", err)
+ 222 │ │       }
+ 223 │ │       if ua != nil {
+ 224 │ │           v := types.Money(*ua)
+ 225 │ │           resp.UniformARate = &v
+ 226 │ │       }
+ 227 │ │       if ub != nil {
+ 228 │ │           v := types.Money(*ub)
+ 229 │ │           resp.UniformBRate = &v
+ 230 │ │       }
+ 231 │ │       return &resp, nil
+ 232 │ │   }
+     ⋮ │   ▲
+     ⋮ ├───╯
+ 233 │     
+ 234 │     // --- Prefix Rates ---
+─────╯
+
+
+
+── Error ──────────────────────────────────────────────────────────────────────────────────[E0003]──
+
+internal error: unknown path segment value type Invalid
+
+     ╭─[ /Users/kinnsei/ai/bos3000/billing/rates.go:254:1 ]
+     │
+ 252 │     //
+ 253 │     //encore:api auth method=POST path=/billing/rate-plans/:id/prefixes
+ 254 │ ╭─▶ func (s *Service) AddPrefixRate(ctx context.Context, p *AddPrefixRateParams) (*PrefixRateResponse, error) {
+ 255 │ │       if err := requireAdmin(); err != nil {
+ 256 │ │           return nil, err
+ 257 │ │       }
+ 258 │ │   
+ 259 │ │       if p.Prefix == "" {
+ 260 │ │           return nil, &errs.Error{Code: errs.InvalidArgument, Message: "prefix is required"}
+ 261 │ │       }
+ 262 │ │   
+ 263 │ │       var resp PrefixRateResponse
+ 264 │ │       err := db.QueryRow(ctx, `
+ 265 │ │           INSERT INTO rate_plan_prefixes (rate_plan_id, prefix, a_rate, b_rate)
+ 266 │ │           VALUES ($1, $2, $3, $4)
+ 267 │ │           RETURNING id, rate_plan_id, prefix, a_rate, b_rate
+ 268 │ │       `, p.ID, p.Prefix, int64(p.ARate), int64(p.BRate)).Scan(
+ 269 │ │           &resp.ID, &resp.RatePlanID, &resp.Prefix, &resp.ARate, &resp.BRate,
+ 270 │ │       )
+ 271 │ │       if err != nil {
+ 272 │ │           return nil, fmt.Errorf("insert prefix rate: %w", err)
+ 273 │ │       }
+ 274 │ │       return &resp, nil
+ 275 │ │   }
+     ⋮ │   ▲
+     ⋮ ├───╯
+ 276 │     
+ 277 │     type RemovePrefixRateParams struct {
+─────╯
+
+
+
+── Error ──────────────────────────────────────────────────────────────────────────────────[E0003]──
+
+internal error: unknown path segment value type Invalid
+
+     ╭─[ /Users/kinnsei/ai/bos3000/billing/rates.go:285:1 ]
+     │
+ 283 │     //
+ 284 │     //encore:api auth method=DELETE path=/billing/rate-plans/:id/prefixes/:prefix
+ 285 │ ╭─▶ func (s *Service) RemovePrefixRate(ctx context.Context, p *RemovePrefixRateParams) error {
+ 286 │ │       if err := requireAdmin(); err != nil {
+ 287 │ │           return err
+ 288 │ │       }
+ 289 │ │   
+ 290 │ │       result, err := db.Exec(ctx, `
+ 291 │ │           DELETE FROM rate_plan_prefixes WHERE rate_plan_id=$1 AND prefix=$2
+ 292 │ │       `, p.ID, p.Prefix)
+ 293 │ │       if err != nil {
+ 294 │ │           return fmt.Errorf("delete prefix rate: %w", err)
+ 295 │ │       }
+ 296 │ │       if result.RowsAffected() == 0 {
+ 297 │ │           return &errs.Error{Code: errs.NotFound, Message: "prefix rate not found"}
+ 298 │ │       }
+ 299 │ │       return nil
+ 300 │ │   }
+     ⋮ │   ▲
+     ⋮ ├───╯
+ 301 │     
+ 302 │     // --- Rate Resolution ---
+─────╯
+
+
+
+── Error ──────────────────────────────────────────────────────────────────────────────────[E0003]──
+
+internal error: unknown path segment value type Invalid
+
+     ╭─[ /Users/kinnsei/ai/bos3000/billing/rates.go:393:1 ]
+     │
+ 391 │     //
+ 392 │     //encore:api auth method=PUT path=/billing/accounts/:userId/rate-config
+ 393 │ ╭─▶ func (s *Service) SetUserRateConfig(ctx context.Context, p *SetUserRateConfigParams) (*SetUserRateConfigResponse, error) {
+ 394 │ │       if err := requireAdmin(); err != nil {
+ 395 │ │           return nil, err
+ 396 │ │       }
+ 397 │ │   
+ 398 │ │       var aRate, bRate *int64
+ 399 │ │       if p.ALegRate != nil {
+ 400 │ │           v := int64(*p.ALegRate)
+ 401 │ │           aRate = &v
+ 402 │ │       }
+ 403 │ │       if p.BLegRate != nil {
+ 404 │ │           v := int64(*p.BLegRate)
+ 405 │ │           bRate = &v
+ 406 │ │       }
+ 407 │ │   
+ 408 │ │       result, err := db.Exec(ctx, `
+ 409 │ │           UPDATE billing_accounts SET rate_plan_id=$1, a_leg_rate=$2, b_leg_rate=$3, updated_at=NOW()
+ 410 │ │           WHERE user_id=$4
+ 411 │ │       `, p.RatePlanID, aRate, bRate, p.UserID)
+ 412 │ │       if err != nil {
+ 413 │ │           return nil, fmt.Errorf("update rate config: %w", err)
+ 414 │ │       }
+ 415 │ │       if result.RowsAffected() == 0 {
+ 416 │ │           return nil, &errs.Error{Code: errs.NotFound, Message: "billing account not found"}
+ 417 │ │       }
+ 418 │ │       return &SetUserRateConfigResponse{Success: true}, nil
+ 419 │ │   }
+     ⋮ │   ▲
+     ⋮ ├───╯
+─────╯][0m
+Encore requires the function parameter name to match the path parameter for struct-based endpoints. Let me check the existing pattern.
+[94m[Grep][0m [95m/Users/kinnsei/ai/bos3000/auth[0m pattern: [96mpath:\"[0m
+[94m[Grep][0m [95m/Users/kinnsei/ai/bos3000/auth[0m pattern: [96m"encore:api.*path=.*:"[0m
+[94m[Grep][0m [95m/Users/kinnsei/ai/bos3000[0m pattern: [96mencore:api.*:.*"[0m
+[94m[Grep][0m [95m/Users/kinnsei/ai/bos3000[0m pattern: [96m"encore:api"[0m
+[94m[Grep][0m [95m/Users/kinnsei/ai/bos3000[0m pattern: [96mencore:api[0m
+I see the pattern now. In the auth service, path params are passed as separate function parameters (e.g., `id int64`) NOT in a struct. For endpoints with both path params and body, separate params are used (e.g., `func (s *Service) AddIPWhitelist(ctx context.Context, id int64, req *IPRequest)`).
+
+I need to refactor all my endpoints with path params to use this pattern. Let me rewrite `rates.go`.
+[94m[Write][0m [95m/Users/kinnsei/ai/bos3000/billing/rates.go[0m "package billing
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"encore.dev/beta/errs"
+	"encore.dev/storage/sqldb"
+
+	authpkg "encore.app/auth"
+	"encore.app/pkg/errcode"
+	"encore.app/pkg/types"
+)
+
+func... (11106 chars)"
+Now I need to update the tests to match the new function signatures (separate path params).
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/billing/billing_test.go[0m
+The `AddPrefixRate` now takes `id` as a separate parameter, not in the struct. Let me fix the test calls.
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/billing/billing_test.go[0m edit: "	pfx, err := AddPrefixRate(ctx, &AddPrefixRatePara..." → "	pfx, err := AddPrefixRate(ctx, plan.ID, &AddPrefi..."
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/billing/billing_test.go[0m edit: "	_, err = AddPrefixRate(aCtx, &AddPrefixRateParams..." → "	_, err = AddPrefixRate(aCtx, plan.ID, &AddPrefixR..."
+Now let me run the tests again.
+[94m[Bash][0m Run billing tests $ encore test ./billing/... -run "TestFinalize|TestCreate|TestResolve|TestAdmin" -v 2>&1
+All 10 tests pass. Let me now close the bead and update progress.
+[94m[TodoWrite][0m
+[94m[Bash][0m Close the bead $ br close bd-3it.1.6 --reason "Rate plan CRUD, prefix rates, multi-tier rate resolution, finalize blo...
+[94m[Bash][0m Flush tracker state $ br sync --flush-only 2>&1
+Now update the progress file.
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/.ralph-tui/progress.md[0m edit: "- **Encore test API calls**: Use package-level gen..." → "- **Encore test API calls**: Use package-level gen..."
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/.ralph-tui/progress.md[0m
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/.ralph-tui/progress.md[0m edit: "  - `cache.NewIntKeyspace[int64]` uses the key typ..." → "  - `cache.NewIntKeyspace[int64]` uses the key typ..."
+[94m[TodoWrite][0m
+All done. Here's what was implemented:
+
+**Files created/modified:**
+- `billing/migrations/3_create_rate_plans.up.sql` — `rate_plans` and `rate_plan_prefixes` tables
+- `billing/rates.go` — 8 endpoints: CreateRatePlan, UpdateRatePlan, ListRatePlans, GetRatePlan, AddPrefixRate, RemovePrefixRate, ResolveRate, SetUserRateConfig
+- `billing/billing_test.go` — 10 new tests all passing (3 finalize + 7 rate plan)
+
+**Key design decisions:**
+- Rate resolution follows user > plan_uniform > plan_prefix priority chain
+- All rate plan CRUD endpoints enforce admin-only access via `requireAdmin()`
+- ResolveRate is a private endpoint (service-to-service) so no auth needed
+- Block billing: A-leg 6s blocks, B-leg 60s blocks verified in tests
+
+<promise>COMPLETE</promise>
