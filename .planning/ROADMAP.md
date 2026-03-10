@@ -106,12 +106,15 @@ Plans:
   3. 客户可查询/导出话单（Excel/CSV），查看详情页（A/B 路分离、hangup_cause、录音播放）；可查看损耗概览趋势和明细
   4. 客户可查看余额与信用额度、消费流水、费率查询；可管理 API Key、配置/测试 Webhook、设置 IP 白名单
   5. WebSocket 实时推送通话状态变更到 Admin 和 Client Dashboard，无需页面轮询
-
-**Plans**: TBD
+**Plans**: 6 plans
 
 Plans:
-- [ ] 05-01: TBD
-- [ ] 05-02: TBD
+- [ ] 05-01-PLAN.md — WebSocket backend (Hub + handler) in callback service + Portal scaffold (Vite, shadcn, theme, tests)
+- [ ] 05-02-PLAN.md — App shell (sidebar + topnav), auth flow, API layer, WebSocket hook, shared components
+- [ ] 05-03-PLAN.md — Dashboard overview (metric cards, trend charts) + Callback operations center (form, active calls, history)
+- [ ] 05-04-PLAN.md — CDR query/export/detail (recording player) + Wastage analysis (trend, distribution, detail)
+- [ ] 05-05-PLAN.md — Finance center (balance, transactions, rates) + API integration (keys, webhook, IP whitelist) + Account settings
+- [ ] 05-06-PLAN.md — Admin WebSocket upgrade (replace polling) + visual polish checkpoint
 
 ## Progress
 
@@ -124,4 +127,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | 2. 呼叫引擎（Mock） | 0/3 | Planning complete | - |
 | 3. FreeSWITCH + 录音 + Webhook | 0/4 | Planning complete | - |
 | 4. Admin Dashboard | 0/8 | Planning complete | - |
-| 5. Client Portal | 0/2 | Not started | - |
+| 5. Client Portal | 0/6 | Planning complete | - |
