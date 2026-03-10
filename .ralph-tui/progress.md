@@ -15,6 +15,7 @@ after each iteration and it's included in prompts for context.
 - **No `sqldb.ErrNoRows.Is()`**: Use `errors.Is(err, sqldb.ErrNoRows)` — the sentinel error has no `.Is()` method.
 - **Encore test helpers**: Import `"encore.dev/et"` (NOT `"encore.dev/test"`). Use `et.Topic(topic).PublishedMessages()` for Pub/Sub test assertions.
 - **Admin login as raw endpoint**: Encore structured endpoints can't set cookies. Use `//encore:api public raw` for admin login to set `Set-Cookie` header directly.
+- **`sqldb.Named()` must be package-level**: `sqldb.Named("dbname")` cannot be called inside functions — must be assigned to a package-level `var` (Encore error E1183).
 - **Test unique emails**: Use `time.Now().UnixNano()` in email addresses to avoid unique constraint violations across test runs.
 
 ---
@@ -127,4 +128,16 @@ after each iteration and it's included in prompts for context.
   - Encore `et.Topic(topic).PublishedMessages()` works for verifying Pub/Sub publishes in tests — import `"encore.dev/et"` (not `"encore.dev/test"`)
   - `TIMESTAMPTZ` columns must be scanned as `time.Time`, not `string`
   - `db.Exec` returns a result with `RowsAffected()` method (int64) for counting affected rows
+---
+
+## 2026-03-10 - bd-3it.1.8
+- Created routing service with gateway migrations, A-leg weighted round-robin, and gateway admin CRUD
+- Files changed: `routing/routing.go` (new), `routing/aleg.go` (new), `routing/routing_test.go` (new), `routing/migrations/1_create_gateways.up.sql` (new)
+- `routing/routing.go`: Service struct with sync.Mutex + aLegGateways slice, DB, billingDB (sqldb.Named), initService loads A-leg gateways, validatePrefixConsistency compares gateway vs billing rate plan prefixes
+- `routing/aleg.go`: PickALeg (private POST, smooth weighted RR nginx algorithm), CreateGateway, UpdateGateway, ListGateways, ToggleGateway (all auth, admin-only), auto-reloads A-leg pool on changes
+- `routing/routing_test.go`: 3 tests — WeightedDistribution (1000 iterations, ±5% tolerance), SkipsUnhealthy, NoHealthy (503 Unavailable)
+- **Learnings:**
+  - `sqldb.Named("billing")` must be a package-level variable — cannot call inside a function (Encore E1183)
+  - Smooth weighted RR: each tick currentWeight += weight, pick max, subtract totalWeight from winner — gives exact weight-proportional distribution
+  - Go 1.22+ `for i := range N` preferred over `for i := 0; i < N; i++`
 ---

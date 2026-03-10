@@ -1,0 +1,139 @@
+# Iteration 9 Log
+
+## Metadata
+
+- **Task ID**: bd-3it.1.13
+- **Task Title**: [P01-W2-T02] Async audit logging via Pub/Sub
+- **Description**: ## Action
+
+Create `compliance/migrations/2_create_audit_logs.up.sql`:
+```sql
+CREATE TABLE audit_logs (
+    id BIGSERIAL PRIMARY KEY,
+    operator_id BIGINT NOT NULL,
+    operator_name VARCHAR(100),
+  ...
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-03-10T09:46:57.957Z
+- **Ended At**: 2026-03-10T09:49:56.820Z
+- **Duration**: 2m 58s
+- **Input Tokens**: 84
+- **Output Tokens**: 9334
+- **Total Tokens**: 9418
+- **Agent**: claude
+- **Model**: claude-opus-4-6
+- **Epic**: bd-3it.1
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+Let me study the progress file and existing compliance service first.
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/.ralph-tui/progress.md[0m
+[94m[Glob][0m pattern: [96mcompliance/**/*[0m
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/compliance/compliance.go[0m
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/compliance/compliance_test.go[0m
+Good, I have the full picture. Now let me implement the audit logging feature.
+[94m[Write][0m [95m/Users/kinnsei/ai/bos3000/compliance/migrations/2_create_audit_logs.up.sql[0m "CREATE TABLE audit_logs (
+    id BIGSERIAL PRIMARY KEY,
+    operator_id BIGINT NOT NULL,
+    operator_name VARCHAR(100),
+    action VARCHAR(50) NOT NULL,
+    resource_type VARCHAR(50) NOT NULL,
+    re... (599 chars)"
+[94m[Write][0m [95m/Users/kinnsei/ai/bos3000/compliance/audit.go[0m "package compliance
+
+import (
+	"context"
+	"encoding/json"
+	"strconv"
+
+	"encore.dev/beta/errs"
+	"encore.dev/cron"
+	"encore.dev/pubsub"
+	"encore.dev/rlog"
+
+	authpkg "encore.app/auth"
+)
+
+// AuditEvent rep... (6431 chars)"
+Now let me check if `db.Exec` returns something with `RowsAffected()` in Encore's sqldb.
+[94m[Grep][0m pattern: [96mRowsAffected|ExecResult[0m
+Good, `RowsAffected()` pattern is already used. Now add the audit tests to `compliance_test.go`.
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/compliance/compliance_test.go[0m
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/compliance/compliance_test.go[0m edit: "import (
+	"context"
+	"errors"
+	"fmt"
+	"testing"
+	"..." → "import (
+	"context"
+	"encoding/json"
+	"errors"
+	"f..."
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/compliance/compliance_test.go[0m edit: "	t.Run("client cannot add for other user", func(t ..." → "	t.Run("client cannot add for other user", func(t ..."
+Need to check the correct import path for Encore's test package.
+[94m[Grep][0m pattern: [96met\.\w+|encore\.dev/et|encore\.dev/test[0m
+[94m[Grep][0m pattern: [96mencore\.dev/et[0m
+[94m[Grep][0m pattern: [96met\.|PublishedMessages|MockEndpoint[0m
+This is a new usage. Let me check what's available in Encore's go.mod.
+[94m[Bash][0m Check encore.dev version in go.mod $ grep "encore.dev" /Users/kinnsei/ai/bos3000/go.mod | head -5
+[94m[Bash][0m Find et/test package in encore.dev module $ ls /Users/kinnsei/go/pkg/mod/encore.dev@v1.52.1/et* 2>/dev/null || find /Users/kinnsei/go/pkg/mod/en...
+[94m[Bash][0m Check for et or test subdirectory $ ls /Users/kinnsei/go/pkg/mod/encore.dev@v1.52.1/test/ 2>/dev/null
+
+[91m[Error: Exit code 1
+config.go
+mocking.go
+package.go
+pkgfn.go
+pubsub.go][0m
+So it's `encore.dev/et` not `encore.dev/test`. Let me check the package name:
+[94m[Bash][0m Check et package name $ head -5 /Users/kinnsei/go/pkg/mod/encore.dev@v1.52.1/et/package.go
+Good, the import should be `"encore.dev/et"`. Let me also check the Topic API:
+[94m[Bash][0m Check et.Topic API $ head -30 /Users/kinnsei/go/pkg/mod/encore.dev@v1.52.1/et/pubsub.go
+Now fix the import:
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/compliance/compliance_test.go[0m edit: "	"encore.dev/beta/auth"
+	"encore.dev/beta/errs"
+	e..." → "	"encore.dev/beta/auth"
+	"encore.dev/beta/errs"
+	"..."
+Now check if `json` is needed (it is, for `json.RawMessage` in the test):
+[94m[Bash][0m Run audit and query tests $ encore test ./compliance/... -run "TestAudit|TestQuery" -v 2>&1 | tail -50
+Scan error — likely `created_at` is `time.Time` not `string`. Let me fix the scan. The `TIMESTAMPTZ` column needs to be scanned as `time.Time`.
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/compliance/audit.go[0m edit: "import (
+	"context"
+	"encoding/json"
+	"strconv"
+
+	..." → "import (
+	"context"
+	"encoding/json"
+	"strconv"
+	"..."
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/compliance/audit.go[0m edit: "	CreatedAt    string          `json:"created_at"`" → "	CreatedAt    time.Time       `json:"created_at"`"
+Wait, `time` should be used now since `CreatedAt` is `time.Time`. Let me check:
+[94m[Bash][0m Re-run audit and query tests $ encore test ./compliance/... -run "TestAudit|TestQuery" -v 2>&1 | tail -40
+All 3 tests pass. Let me also run the full compliance test suite to make sure nothing is broken:
+[94m[Bash][0m Run full compliance test suite $ encore test ./compliance/... -v 2>&1 | tail -30
+All 11 tests pass. Now close the bead and update progress.
+[94m[Bash][0m Close bead bd-3it.1.13 $ br close bd-3it.1.13 --reason "Async audit logging via Pub/Sub with subscription handler, paginated ...
+[94m[Bash][0m Flush tracker state to JSONL $ br sync --flush-only
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/.ralph-tui/progress.md[0m
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/.ralph-tui/progress.md[0m edit: "  - `cache.NewIntKeyspace` Increment returns `(int..." → "  - `cache.NewIntKeyspace` Increment returns `(int..."
+Also update the Codebase Patterns section with the `et` import pattern:
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/.ralph-tui/progress.md[0m edit: "- **No `sqldb.ErrNoRows.Is()`**: Use `errors.Is(er..." → "- **No `sqldb.ErrNoRows.Is()`**: Use `errors.Is(er..."
+All done. Here's a summary:
+
+**Implemented:**
+- `compliance/migrations/2_create_audit_logs.up.sql` — audit_logs table with indexes on operator, action, resource, and created_at
+- `compliance/audit.go`:
+  - `AuditEvents` Pub/Sub topic with AtLeastOnce delivery
+  - `write-audit-log` subscription → `HandleAuditEvent` inserts to DB
+  - `PublishAuditEvent` (private POST `/compliance/audit`) — async publish for other services
+  - `QueryAuditLogs` (auth GET `/compliance/audit-logs`) — admin-only, filtered + paginated
+  - `CleanupAuditLogs` cron (3am UTC daily) — deletes records >90 days old
+- 3 new tests added: `TestAuditEventPublished`, `TestQueryAuditLogs`, `TestAuditLogPagination`
+
+**All 11 compliance tests pass.**
+
+<promise>COMPLETE</promise>
