@@ -102,3 +102,16 @@ after each iteration and it's included in prompts for context.
   - Dynamic SQL query building with `strconv.Itoa(argIdx)` for parameterized filters works well with Encore's sqldb
   - Go 1.22+ `max()` builtin preferred over `if` for defaulting page numbers
 ---
+
+## 2026-03-10 - bd-3it.1.12
+- Created compliance service with blacklist CRUD and daily rate limiting
+- Files changed: `compliance/compliance.go` (new), `compliance/blacklist.go` (new), `compliance/ratelimit.go` (new), `compliance/migrations/1_create_blacklist.up.sql` (new), `compliance/compliance_test.go` (new)
+- `compliance/compliance.go`: Service struct, DB (`sqldb.NewDatabase`), Redis cache cluster (`cache.NewCluster`)
+- `compliance/blacklist.go`: 4 endpoints — CheckBlacklist (private, global-first then client-level), AddBlacklist (auth, admin/client permission checks), RemoveBlacklist (auth, ownership enforced), ListBlacklist (auth, admin sees all, client sees own+global)
+- `compliance/ratelimit.go`: CheckDailyLimit (private, Redis IntKeyspace with optimistic increment, rollback on limit exceeded, fail-open on cache errors with CurrentCount=-1)
+- `compliance/compliance_test.go`: 8 tests all passing — TestBlacklistGlobalHit, TestBlacklistClientHit, TestBlacklistNotBlocked, TestBlacklistGlobalCannotBeOverridden, TestDailyLimitUnderLimit, TestDailyLimitExceeded, TestDailyLimitFailOpen, TestAddBlacklistPermissions (4 subtests)
+- **Learnings:**
+  - Encore GET endpoints don't support `*int64` in query params — use `int64` with 0 as sentinel instead
+  - `UNIQUE NULLS NOT DISTINCT (number, user_id)` works in PG 15+ for treating NULL=NULL in unique constraints
+  - `cache.NewIntKeyspace` Increment returns `(int64, error)` — can use negative increment (-1) for decrement
+---
