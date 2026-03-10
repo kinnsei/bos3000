@@ -49,11 +49,12 @@ Plans:
   3. 用户可查询任意呼叫的实时状态（含 A/B 路详情、桥接时长、损耗类型）；管理员或客户可强制挂断进行中的通话
   4. 系统自动将失败呼叫分类为 a_connected_b_failed 或 bridge_broken_early，并精确计算损耗成本
   5. 所有状态机流程可通过 Mock FSClient 进行单元测试，不依赖真实 FreeSWITCH
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
+- [ ] 02-01-PLAN.md — FSClient interface, MockFSClient, DB schema (callback_calls + system_configs)
+- [ ] 02-02-PLAN.md — State machine, finalizeCall cleanup, wastage classification
+- [ ] 02-03-PLAN.md — Callback API endpoints (initiate, status, hangup, list) + integration tests
 
 ### Phase 3: FreeSWITCH 集成 + 录音 + Webhook
 **Goal**: 系统通过真实 FreeSWITCH 完成 A/B 双外呼桥接，支持通话录音（分轨 + 合并 + S3 上传）和 Webhook 异步通知（含重试和 DLQ）
@@ -114,7 +115,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. 平台基础 | 0/5 | Planning complete | - |
-| 2. 呼叫引擎（Mock） | 0/2 | Not started | - |
+| 2. 呼叫引擎（Mock） | 0/3 | Planning complete | - |
 | 3. FreeSWITCH + 录音 + Webhook | 0/3 | Not started | - |
 | 4. Admin Dashboard | 0/3 | Not started | - |
 | 5. Client Portal | 0/2 | Not started | - |
