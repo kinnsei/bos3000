@@ -7,7 +7,10 @@ import (
 	"slices"
 	"testing"
 
+	"encore.dev/beta/auth"
 	"encore.dev/beta/errs"
+
+	authpkg "encore.app/auth"
 )
 
 func seedGateways(t *testing.T, ctx context.Context, gateways []struct {
@@ -258,5 +261,186 @@ func TestPrefixConsistencyWarning(t *testing.T) {
 	// "138" should be in gateway-only list since no rate plan has it
 	if !slices.Contains(gwOnly, "138") {
 		t.Errorf("expected prefix '138' in gateway-only mismatches, got %v", gwOnly)
+	}
+}
+
+// --- DID tests ---
+
+func clearDIDs(t *testing.T, ctx context.Context) {
+	t.Helper()
+	_, err := db.Exec(ctx, `DELETE FROM did_numbers`)
+	if err != nil {
+		t.Fatalf("failed to clear did_numbers: %v", err)
+	}
+}
+
+func seedDID(t *testing.T, ctx context.Context, number string, userID *int64) int64 {
+	t.Helper()
+	var id int64
+	err := db.QueryRow(ctx, `
+		INSERT INTO did_numbers (number, user_id, status)
+		VALUES ($1, $2, 'available')
+		RETURNING id
+	`, number, userID).Scan(&id)
+	if err != nil {
+		t.Fatalf("failed to seed DID %s: %v", number, err)
+	}
+	return id
+}
+
+func adminCtx() context.Context {
+	return auth.WithContext(context.Background(), "admin-1", &authpkg.AuthData{
+		UserID:   1,
+		Role:     "admin",
+		Username: "admin",
+	})
+}
+
+func TestSelectDIDUserPool(t *testing.T) {
+	ctx := context.Background()
+	clearDIDs(t, ctx)
+
+	userID := int64(42)
+	seedDID(t, ctx, "+18001111111", &userID)
+	seedDID(t, ctx, "+18001111112", &userID)
+
+	// Also seed a public DID
+	seedDID(t, ctx, "+18009999999", nil)
+
+	svc := &Service{}
+	resp, err := svc.SelectDID(ctx, &SelectDIDParams{UserID: 42})
+	if err != nil {
+		t.Fatalf("SelectDID: %v", err)
+	}
+
+	// Should select from user's pool
+	if resp.Number != "+18001111111" && resp.Number != "+18001111112" {
+		t.Errorf("expected user DID, got %s", resp.Number)
+	}
+}
+
+func TestSelectDIDPublicFallback(t *testing.T) {
+	ctx := context.Background()
+	clearDIDs(t, ctx)
+
+	// Only seed public DIDs (no user assignment)
+	seedDID(t, ctx, "+18005550001", nil)
+
+	svc := &Service{}
+	resp, err := svc.SelectDID(ctx, &SelectDIDParams{UserID: 99})
+	if err != nil {
+		t.Fatalf("SelectDID: %v", err)
+	}
+
+	if resp.Number != "+18005550001" {
+		t.Errorf("expected public DID +18005550001, got %s", resp.Number)
+	}
+}
+
+func TestSelectDIDNoneAvailable(t *testing.T) {
+	ctx := context.Background()
+	clearDIDs(t, ctx)
+
+	svc := &Service{}
+	_, err := svc.SelectDID(ctx, &SelectDIDParams{UserID: 1})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	var errResp *errs.Error
+	if !errors.As(err, &errResp) {
+		t.Fatalf("expected *errs.Error, got %T", err)
+	}
+	if errResp.Code != errs.ResourceExhausted {
+		t.Errorf("expected ResourceExhausted, got %v", errResp.Code)
+	}
+}
+
+func TestImportDIDs(t *testing.T) {
+	ctx := adminCtx()
+	clearDIDs(t, ctx)
+
+	resp, err := ImportDIDs(ctx, &ImportDIDsParams{
+		Numbers: []string{"+18001110001", "+18001110002", "+18001110003"},
+	})
+	if err != nil {
+		t.Fatalf("ImportDIDs: %v", err)
+	}
+	if resp.Imported != 3 {
+		t.Errorf("expected 3 imported, got %d", resp.Imported)
+	}
+	if resp.Skipped != 0 {
+		t.Errorf("expected 0 skipped, got %d", resp.Skipped)
+	}
+
+	// Import again with overlap
+	resp, err = ImportDIDs(ctx, &ImportDIDsParams{
+		Numbers: []string{"+18001110002", "+18001110003", "+18001110004"},
+	})
+	if err != nil {
+		t.Fatalf("ImportDIDs second call: %v", err)
+	}
+	if resp.Imported != 1 {
+		t.Errorf("expected 1 imported, got %d", resp.Imported)
+	}
+	if resp.Skipped != 2 {
+		t.Errorf("expected 2 skipped, got %d", resp.Skipped)
+	}
+}
+
+func TestAssignUnassignDID(t *testing.T) {
+	ctx := adminCtx()
+	clearDIDs(t, ctx)
+
+	// Import a DID
+	_, err := ImportDIDs(ctx, &ImportDIDsParams{
+		Numbers: []string{"+18007770001"},
+	})
+	if err != nil {
+		t.Fatalf("ImportDIDs: %v", err)
+	}
+
+	// List to get the ID
+	listResp, err := ListDIDs(ctx, &ListDIDsParams{Page: 1})
+	if err != nil {
+		t.Fatalf("ListDIDs: %v", err)
+	}
+	if len(listResp.DIDs) != 1 {
+		t.Fatalf("expected 1 DID, got %d", len(listResp.DIDs))
+	}
+	didID := listResp.DIDs[0].ID
+
+	// Assign to user 42
+	assignResp, err := AssignDID(ctx, didID, &AssignDIDParams{UserID: 42})
+	if err != nil {
+		t.Fatalf("AssignDID: %v", err)
+	}
+	if assignResp.UserID != 42 {
+		t.Errorf("expected user_id 42, got %d", assignResp.UserID)
+	}
+
+	// Verify user pool membership via SelectDID
+	selectResp, err := SelectDID(context.Background(), &SelectDIDParams{UserID: 42})
+	if err != nil {
+		t.Fatalf("SelectDID after assign: %v", err)
+	}
+	if selectResp.Number != "+18007770001" {
+		t.Errorf("expected +18007770001, got %s", selectResp.Number)
+	}
+
+	// Unassign
+	_, err = UnassignDID(ctx, didID)
+	if err != nil {
+		t.Fatalf("UnassignDID: %v", err)
+	}
+
+	// Verify no longer in user pool (should fallback to public pool)
+	selectResp, err = SelectDID(context.Background(), &SelectDIDParams{UserID: 42})
+	if err != nil {
+		t.Fatalf("SelectDID after unassign: %v", err)
+	}
+	// It's now in public pool, so still accessible but via public fallback
+	if selectResp.Number != "+18007770001" {
+		t.Errorf("expected +18007770001 from public pool, got %s", selectResp.Number)
 	}
 }

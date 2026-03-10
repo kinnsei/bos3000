@@ -1,0 +1,106 @@
+# Iteration 11 Log
+
+## Metadata
+
+- **Task ID**: bd-3it.1.9
+- **Task Title**: [P01-W3-T02] B-leg prefix matching with failover and INFR-03 consistency check
+- **Description**: ## Action
+
+Create `routing/bleg.go`:
+- `//encore:api private method=POST path=/routing/pick-b-leg` -- PickBLeg:
+  - Accepts {CalledNumber string}
+  - Extract prefix = CalledNumber[:3]
+  - Query: SELEC...
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-03-10T10:27:41.564Z
+- **Ended At**: 2026-03-10T10:30:30.210Z
+- **Duration**: 2m 48s
+- **Input Tokens**: 59
+- **Output Tokens**: 7793
+- **Total Tokens**: 7852
+- **Agent**: claude
+- **Model**: claude-opus-4-6
+- **Epic**: bd-3it.1
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+Let me study the progress file and existing routing code first.
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/.ralph-tui/progress.md[0m
+[94m[Glob][0m pattern: [96mrouting/**/*.go[0m
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/routing/routing.go[0m
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/routing/aleg.go[0m
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/routing/routing_test.go[0m
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/routing/migrations/1_create_gateways.up.sql[0m
+Let me check the error codes available.
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/pkg/errcode/codes.go[0m
+Now I have full context. Let me create `routing/bleg.go` with PickBLeg and prefix CRUD, then update the test file.
+[94m[Write][0m [95m/Users/kinnsei/ai/bos3000/routing/bleg.go[0m "package routing
+
+import (
+	"context"
+	"errors"
+
+	"encore.dev/beta/errs"
+	"encore.dev/storage/sqldb"
+
+	"encore.app/pkg/errcode"
+)
+
+// --- PickBLeg: prefix matching with failover ---
+
+type PickBLegParam... (6586 chars)"
+Now update the test file with the B-leg tests.
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/routing/routing_test.go[0m edit: "func TestPickALegNoHealthy(t *testing.T) {
+	ctx :=..." → "func TestPickALegNoHealthy(t *testing.T) {
+	ctx :=..."
+The `scanGatewayExists` function is unused — let me remove it.
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/routing/bleg.go[0m
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/routing/bleg.go[0m edit: "import (
+	"context"
+	"errors"
+
+	"encore.dev/beta/e..." → "import (
+	"context"
+
+	"encore.dev/beta/errs"
+
+	"en..."
+Now fix the `slices.Contains` suggestion in the test:
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/routing/routing_test.go[0m edit: "import (
+	"context"
+	"errors"
+	"math"
+	"testing"
+
+..." → "import (
+	"context"
+	"errors"
+	"math"
+	"slices"
+	"..."
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/routing/routing_test.go[0m edit: "	// "138" should be in gateway-only list since no ..." → "	// "138" should be in gateway-only list since no ..."
+Hmm, the slices import might need full path. Let me check if this is Go's built-in slices package.
+[94m[Bash][0m Check for slices usage in codebase $ grep -r '"slices"' --include="*.go" -l 2>/dev/null | head -5
+The slices package is standard in Go 1.21+. The error might be a diagnostic lag. Let me run the tests to verify.
+[94m[Bash][0m Run B-leg and prefix tests $ encore test ./routing/... -run "TestPickBLeg|TestPrefix" -v 2>&1
+All 4 tests pass. Let me also run the full routing test suite to make sure nothing broke.
+[94m[Bash][0m Run all routing tests $ encore test ./routing/... -v 2>&1
+All 7 tests pass. Now close the bead and update progress.
+[94m[Bash][0m Close the bead $ br close bd-3it.1.9 --reason "B-leg prefix matching with failover chain, prefix CRUD, and consistenc...
+[94m[Bash][0m Flush tracker state $ br sync --flush-only 2>&1
+Now update progress.md:
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/.ralph-tui/progress.md[0m edit: "## 2026-03-10 - bd-3it.1.8" → "## 2026-03-10 - bd-3it.1.9
+- Created `routing/bleg..."
+All done. Here's what was implemented:
+
+**`routing/bleg.go`** (new):
+- **PickBLeg** — private POST endpoint that extracts 3-digit prefix from called number, queries gateways by priority, picks first healthy one, follows failover chain (max 3 hops), returns `PREFIX_NOT_FOUND` or `NO_HEALTHY_GATEWAY` errors
+- **AddPrefix / RemovePrefix / ListPrefixes** — admin-only CRUD for gateway prefix mappings
+- **GetPrefixMismatches** — exported consistency check for testing
+
+**`routing/routing_test.go`** (appended 4 tests):
+- TestPickBLegPrefixMatch, TestPickBLegFailover, TestPickBLegUnknownPrefix, TestPrefixConsistencyWarning — all passing
+
+<promise>COMPLETE</promise>

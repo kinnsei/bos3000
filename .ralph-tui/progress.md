@@ -17,6 +17,7 @@ after each iteration and it's included in prompts for context.
 - **Admin login as raw endpoint**: Encore structured endpoints can't set cookies. Use `//encore:api public raw` for admin login to set `Set-Cookie` header directly.
 - **`sqldb.Named()` must be package-level**: `sqldb.Named("dbname")` cannot be called inside functions — must be assigned to a package-level `var` (Encore error E1183).
 - **Test unique emails**: Use `time.Now().UnixNano()` in email addresses to avoid unique constraint violations across test runs.
+- **Encore path conflicts**: Static paths like `/dids/import` conflict with parameterized `/dids/:id/...` under the same prefix. Use a different path structure (e.g., `/did-import`) to avoid E1094.
 
 ---
 
@@ -153,4 +154,18 @@ after each iteration and it's included in prompts for context.
   - `sqldb.Named("billing")` must be a package-level variable — cannot call inside a function (Encore E1183)
   - Smooth weighted RR: each tick currentWeight += weight, pick max, subtract totalWeight from winner — gives exact weight-proportional distribution
   - Go 1.22+ `for i := range N` preferred over `for i := 0; i < N; i++`
+---
+
+## 2026-03-10 - bd-3it.1.10
+- Created DID number pool management with 5 endpoints: SelectDID (private), ImportDIDs, AssignDID, UnassignDID, ListDIDs (all auth/admin)
+- SelectDID: user pool > public pool (user_id IS NULL) priority with RANDOM() selection
+- ImportDIDs: bulk INSERT with ON CONFLICT DO NOTHING, returns imported/skipped counts
+- AssignDID/UnassignDID: update user_id to manage pool membership
+- ListDIDs: paginated with user_id and status filters, dynamic WHERE clause
+- Created migration `2_create_did_numbers.up.sql` with UNIQUE number, status CHECK constraint, indexes on user_id and status
+- Added 5 tests: TestSelectDIDUserPool, TestSelectDIDPublicFallback, TestSelectDIDNoneAvailable, TestImportDIDs, TestAssignUnassignDID — all passing
+- Files changed: `routing/did.go` (new), `routing/migrations/2_create_did_numbers.up.sql` (new), `routing/routing_test.go` (appended)
+- **Learnings:**
+  - Encore path conflict: `/routing/dids/import` (static) conflicts with `/routing/dids/:id/assign` (parameterized) — must use different path prefix like `/routing/did-import`
+  - `db.Exec` result `.RowsAffected()` returns `int64` directly (not `(int64, error)` like database/sql)
 ---
