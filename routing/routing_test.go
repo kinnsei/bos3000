@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"math"
+	"net"
 	"slices"
 	"testing"
 
@@ -443,4 +444,125 @@ func TestAssignUnassignDID(t *testing.T) {
 	if selectResp.Number != "+18007770001" {
 		t.Errorf("expected +18007770001 from public pool, got %s", selectResp.Number)
 	}
+}
+
+// --- Health check tests ---
+
+func seedGatewayFull(t *testing.T, ctx context.Context, name, gwType, sipAddr string, healthy, enabled bool, failures, maxFailures int) int64 {
+	t.Helper()
+	var id int64
+	err := db.QueryRow(ctx, `
+		INSERT INTO gateways (name, type, sip_address, weight, healthy, enabled, health_check_failures, max_health_failures)
+		VALUES ($1, $2, $3, 1, $4, $5, $6, $7)
+		RETURNING id
+	`, name, gwType, sipAddr, healthy, enabled, failures, maxFailures).Scan(&id)
+	if err != nil {
+		t.Fatalf("failed to seed gateway %s: %v", name, err)
+	}
+	return id
+}
+
+func getGatewayHealth(t *testing.T, ctx context.Context, id int64) (bool, int) {
+	t.Helper()
+	var healthy bool
+	var failures int
+	err := db.QueryRow(ctx, `SELECT healthy, health_check_failures FROM gateways WHERE id = $1`, id).Scan(&healthy, &failures)
+	if err != nil {
+		t.Fatalf("failed to get gateway health: %v", err)
+	}
+	return healthy, failures
+}
+
+func TestHealthCheckMarksUnhealthy(t *testing.T) {
+	ctx := context.Background()
+	clearGateways(t, ctx)
+
+	// Use an unreachable address so TCP check fails
+	gwID := seedGatewayFull(t, ctx, "HC-Fail", "a_leg", "sip:192.0.2.1:5060", true, true, 0, 3)
+
+	svc := &Service{}
+	if err := svc.loadALegGateways(ctx); err != nil {
+		t.Fatalf("loadALegGateways: %v", err)
+	}
+
+	// Run health check 3 times to accumulate failures
+	for i := range 3 {
+		resp, err := svc.RunHealthCheck(ctx)
+		if err != nil {
+			t.Fatalf("RunHealthCheck iteration %d: %v", i, err)
+		}
+		if len(resp.Results) != 1 {
+			t.Fatalf("expected 1 result, got %d", len(resp.Results))
+		}
+	}
+
+	healthy, failures := getGatewayHealth(t, ctx, gwID)
+	if healthy {
+		t.Error("expected gateway to be unhealthy after 3 failures")
+	}
+	if failures != 3 {
+		t.Errorf("expected 3 failures, got %d", failures)
+	}
+
+	// Verify in-memory state updated
+	svc.mu.Lock()
+	for _, gw := range svc.aLegGateways {
+		if gw.ID == gwID && gw.Healthy {
+			t.Error("expected in-memory gateway to be unhealthy")
+		}
+	}
+	svc.mu.Unlock()
+}
+
+func TestHealthCheckRecovery(t *testing.T) {
+	ctx := context.Background()
+	clearGateways(t, ctx)
+
+	// Start with an unhealthy gateway that has accumulated failures
+	// Use localhost with a listener to simulate a reachable host
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to start test listener: %v", err)
+	}
+	defer ln.Close()
+
+	gwID := seedGatewayFull(t, ctx, "HC-Recover", "a_leg", ln.Addr().String(), false, true, 5, 3)
+
+	svc := &Service{}
+	if err := svc.loadALegGateways(ctx); err != nil {
+		t.Fatalf("loadALegGateways: %v", err)
+	}
+
+	// Run health check — should succeed since we have a listener
+	resp, err := svc.RunHealthCheck(ctx)
+	if err != nil {
+		t.Fatalf("RunHealthCheck: %v", err)
+	}
+	if len(resp.Results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(resp.Results))
+	}
+	if !resp.Results[0].Healthy {
+		t.Error("expected result to show healthy")
+	}
+	if resp.Results[0].Failures != 0 {
+		t.Errorf("expected 0 failures, got %d", resp.Results[0].Failures)
+	}
+
+	// Verify DB state
+	healthy, failures := getGatewayHealth(t, ctx, gwID)
+	if !healthy {
+		t.Error("expected gateway to be healthy in DB")
+	}
+	if failures != 0 {
+		t.Errorf("expected 0 failures in DB, got %d", failures)
+	}
+
+	// Verify in-memory state updated
+	svc.mu.Lock()
+	for _, gw := range svc.aLegGateways {
+		if gw.ID == gwID && !gw.Healthy {
+			t.Error("expected in-memory gateway to be healthy")
+		}
+	}
+	svc.mu.Unlock()
 }

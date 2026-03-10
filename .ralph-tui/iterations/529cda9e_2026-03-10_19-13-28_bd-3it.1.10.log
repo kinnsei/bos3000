@@ -1,0 +1,148 @@
+# Iteration 12 Log
+
+## Metadata
+
+- **Task ID**: bd-3it.1.10
+- **Task Title**: [P01-W3-T03] DID number pool management and caller ID selection
+- **Description**: ## Action
+
+Create `routing/migrations/2_create_did_numbers.up.sql`:
+```sql
+CREATE TABLE did_numbers (
+    id BIGSERIAL PRIMARY KEY,
+    number VARCHAR(20) NOT NULL UNIQUE,
+    user_id BIGINT,
+    stat...
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-03-10T11:13:28.770Z
+- **Ended At**: 2026-03-10T11:17:49.107Z
+- **Duration**: 4m 20s
+- **Input Tokens**: 51
+- **Output Tokens**: 7503
+- **Total Tokens**: 7554
+- **Agent**: claude
+- **Model**: claude-opus-4-6
+- **Epic**: bd-3it.1
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+
+
+I'll start by studying the progress file and existing codebase patterns, then implement the DID management feature.
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/.ralph-tui/progress.md[0m
+[94m[Glob][0m pattern: [96mrouting/**/*[0m
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/routing/routing.go[0m
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/routing/routing_test.go[0m
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/routing/migrations/1_create_gateways.up.sql[0m
+Now I have the full picture. Let me create the migration, DID management endpoints, and tests.
+[94m[Write][0m [95m/Users/kinnsei/ai/bos3000/routing/migrations/2_create_did_numbers.up.sql[0m "CREATE TABLE did_numbers (
+    id BIGSERIAL PRIMARY KEY,
+    number VARCHAR(20) NOT NULL UNIQUE,
+    user_id BIGINT,
+    status VARCHAR(20) NOT NULL DEFAULT 'available' CHECK (status IN ('available', ... (404 chars)"
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/routing/aleg.go[0m
+Good, I can see the patterns. Now let me create the DID management file.
+[94m[Write][0m [95m/Users/kinnsei/ai/bos3000/routing/did.go[0m "package routing
+
+import (
+	"context"
+	"strconv"
+	"strings"
+	"time"
+
+	"encore.dev/beta/errs"
+
+	"encore.app/pkg/errcode"
+)
+
+// --- SelectDID: user pool > public pool priority ---
+
+type SelectDIDParams s... (5828 chars)"
+Now add the DID tests to the existing test file.
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/routing/routing_test.go[0m edit: "	"encore.dev/beta/errs"
+)" → "	"encore.dev/beta/auth"
+	"encore.dev/beta/errs"
+
+	..."
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/routing/routing_test.go[0m edit: "	// "138" should be in gateway-only list since no ..." → "	// "138" should be in gateway-only list since no ..."
+The undefined references are to Encore-generated package-level functions — they'll be generated when `encore test` runs. Let me run the tests.
+[94m[Bash][0m Run DID-related tests $ encore test ./routing/... -run "TestSelectDID|TestImportDID|TestAssign" -v 2>&1
+
+[91m[Error: Exit code 1
+
+── Path Conflict ──────────────────────────────────────────────────────────────────────────[E1094]──
+
+The path segment `id` conflicts with the path `/routing/dids/import`.
+
+     ╭─[ /Users/kinnsei/ai/bos3000/routing/did.go:63:37 ]
+     │
+  61 │ }
+  62 │ 
+  63 │ //encore:api auth method=POST path=/routing/dids/import
+     ⋮                                     ───────────────────
+     · 
+     · 
+ 109 │ }
+ 110 │ 
+ 111 │ //encore:api auth method=POST path=/routing/dids/:id/assign
+     ⋮                                     ───────────────────────
+ 112 │ func (s *Service) AssignDID(ctx context.Context, id int64, p *AssignDIDParams) (*AssignDIDResponse, error) {
+ 113 │     if err := requireAdmin(); err != nil {
+─────╯
+
+Paths must be not be empty and always start with a '/'. You cannot define paths that conflict with
+each other, including static and parameterized paths. For example `/blog/:id` would conflict with
+`/:username`.
+
+For more information about configuring Paths, see https://encore.dev/docs/primitives/apis#rest-apis
+
+
+
+── Path Conflict ──────────────────────────────────────────────────────────────────────────[E1094]──
+
+The path segment `id` conflicts with the path `/routing/dids/import`.
+
+     ╭─[ /Users/kinnsei/ai/bos3000/routing/did.go:63:37 ]
+     │
+  61 │ }
+  62 │ 
+  63 │ //encore:api auth method=POST path=/routing/dids/import
+     ⋮                                     ───────────────────
+     · 
+     · 
+ 134 │ }
+ 135 │ 
+ 136 │ //encore:api auth method=POST path=/routing/dids/:id/unassign
+     ⋮                                     ─────────────────────────
+ 137 │ func (s *Service) UnassignDID(ctx context.Context, id int64) (*UnassignDIDResponse, error) {
+ 138 │     if err := requireAdmin(); err != nil {
+─────╯
+
+Paths must be not be empty and always start with a '/'. You cannot define paths that conflict with
+each other, including static and parameterized paths. For example `/blog/:id` would conflict with
+`/:username`.
+
+For more information about configuring Paths, see https://encore.dev/docs/primitives/apis#rest-apis][0m
+Path conflict — `/routing/dids/import` clashes with `/routing/dids/:id/...`. I need to restructure the paths.
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/routing/did.go[0m edit: "//encore:api auth method=POST path=/routing/dids/i..." → "//encore:api auth method=POST path=/routing/did-im..."
+[94m[Bash][0m Run DID-related tests $ encore test ./routing/... -run "TestSelectDID|TestImportDID|TestAssign" -v 2>&1
+All 5 tests pass. Now close the bead and update progress.
+[94m[Bash][0m Close the bead $ br close bd-3it.1.10 --reason "DID pool management with user pool > public pool priority, bulk impor...
+[94m[Bash][0m Flush tracker state $ br sync --flush-only 2>&1
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/.ralph-tui/progress.md[0m edit: "  - Smooth weighted RR: each tick currentWeight +=..." → "  - Smooth weighted RR: each tick currentWeight +=..."
+Also add the path conflict learning to the codebase patterns section.
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/.ralph-tui/progress.md[0m edit: "- **Test unique emails**: Use `time.Now().UnixNano..." → "- **Test unique emails**: Use `time.Now().UnixNano..."
+All done. Summary:
+
+- **Migration**: `routing/migrations/2_create_did_numbers.up.sql` — `did_numbers` table with unique number, status check constraint, indexes
+- **Endpoints** in `routing/did.go`:
+  - `SelectDID` (private) — user pool → public pool fallback with RANDOM() selection
+  - `ImportDIDs` (admin) — bulk insert with ON CONFLICT DO NOTHING
+  - `AssignDID` / `UnassignDID` (admin) — manage pool membership
+  - `ListDIDs` (admin) — paginated with user_id/status filters
+- **Tests**: 5 tests all passing — user pool, public fallback, none available, import with duplicates, assign/unassign lifecycle
+- **Path fix**: Changed `/routing/dids/import` to `/routing/did-import` to avoid Encore path conflict with `/routing/dids/:id/...`
+
+<promise>COMPLETE</promise>

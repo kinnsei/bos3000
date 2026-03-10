@@ -156,6 +156,20 @@ after each iteration and it's included in prompts for context.
   - Go 1.22+ `for i := range N` preferred over `for i := 0; i < N; i++`
 ---
 
+## 2026-03-10 - bd-3it.1.11
+- Created `routing/health.go` with gateway health check system
+- `RunHealthCheck` (private POST, cron every 1min): queries all enabled gateways, TCP dials SIP address (5s timeout), tracks failure count, marks unhealthy after N failures (default 3), resets on success, updates both DB and in-memory A-leg state
+- `ManualHealthCheck` (auth POST, admin-only): force health check on single gateway by ID
+- `checkTCP` helper: strips `sip:` prefix, defaults port 5060, uses `net.DialTimeout`
+- Cron job `gateway-health-check` at 1-minute interval (minimum Encore allows)
+- Added 2 tests: TestHealthCheckMarksUnhealthy (3 consecutive failures → unhealthy), TestHealthCheckRecovery (listener → healthy + failures reset)
+- Files changed: `routing/health.go` (new), `routing/routing_test.go` (appended)
+- **Learnings:**
+  - `net.DialTimeout("tcp", addr, timeout)` is sufficient for basic SIP gateway health checks — no need for SIP-level probes
+  - Test recovery pattern: use `net.Listen("tcp", "127.0.0.1:0")` to create a temporary listener for TCP reachability tests
+  - Unreachable IP `192.0.2.1` (TEST-NET-1 per RFC 5737) reliably times out for failure simulation, but adds ~15s per test due to 5s timeout × 3 iterations
+---
+
 ## 2026-03-10 - bd-3it.1.10
 - Created DID number pool management with 5 endpoints: SelectDID (private), ImportDIDs, AssignDID, UnassignDID, ListDIDs (all auth/admin)
 - SelectDID: user pool > public pool (user_id IS NULL) priority with RANDOM() selection
