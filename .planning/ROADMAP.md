@@ -66,12 +66,13 @@ Plans:
   3. 通话桥接后自动开始 A/B 分轨录音，通话结束后异步 ffmpeg 合并为双声道 MP3 并上传 S3；用户可在线播放和下载录音
   4. 呼叫状态变更时自动创建 Webhook 投递记录，Worker 以指数退避重试，超限进 DLQ；管理员可查看 DLQ 并手动重试
   5. 客户可配置 webhook_url 并查看最近发送记录
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
-- [ ] 03-03: TBD
+- [ ] 03-01-PLAN.md — ESLFSClient implementation (eslgo wrapper) + FSClientManager HA + Docker FreeSWITCH
+- [ ] 03-02-PLAN.md — Recording service: Pub/Sub merge worker, ffmpeg, S3 upload, presigned URL API
+- [ ] 03-03-PLAN.md — Webhook service: delivery worker, HMAC signing, DLQ admin APIs, client config APIs
+- [ ] 03-04-PLAN.md — Integration wiring: state machine recording/webhook triggers + FSClientManager init
 
 ### Phase 4: Admin Dashboard
 **Goal**: 管理员可通过专业级 Web 界面完成全部平台运营操作：实时监控、客户管理、网关管理、话单查询、损耗分析、财务对账、合规审计和系统运维
@@ -116,6 +117,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 |-------|----------------|--------|-----------|
 | 1. 平台基础 | 0/5 | Planning complete | - |
 | 2. 呼叫引擎（Mock） | 0/3 | Planning complete | - |
-| 3. FreeSWITCH + 录音 + Webhook | 0/3 | Not started | - |
+| 3. FreeSWITCH + 录音 + Webhook | 0/4 | Planning complete | - |
 | 4. Admin Dashboard | 0/3 | Not started | - |
 | 5. Client Portal | 0/2 | Not started | - |
