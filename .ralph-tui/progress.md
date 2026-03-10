@@ -11,6 +11,8 @@ after each iteration and it's included in prompts for context.
 - **No errs.As**: Use standard `errors.As` from the `errors` package instead.
 - **Encore auth handler**: Use `AuthParams` struct with `cookie:"session"`, `header:"Authorization"`, `query:"api_key"` tags for multi-method auth dispatch.
 - **Encore test API calls**: Use package-level generated functions (e.g., `CreateAPIKey(ctx)`) not `svc.Method(ctx)` for `encore:api` endpoints in tests. Direct method calls bypass Encore's request pipeline so `auth.Data()` returns nil. Use `auth.WithContext()` to set up auth context for tests.
+- **Encore path params**: Path parameters (`:id`, `:prefix`) must be separate function parameters, not struct fields. For endpoints with path params + body: `func (s *Service) Foo(ctx context.Context, id int64, p *Params)`. Use `authpkg.Data()` (import alias) to check roles cross-service.
+- **No `sqldb.ErrNoRows.Is()`**: Use `errors.Is(err, sqldb.ErrNoRows)` — the sentinel error has no `.Is()` method.
 - **Admin login as raw endpoint**: Encore structured endpoints can't set cookies. Use `//encore:api public raw` for admin login to set `Set-Cookie` header directly.
 - **Test unique emails**: Use `time.Now().UnixNano()` in email addresses to avoid unique constraint violations across test runs.
 
@@ -73,4 +75,16 @@ after each iteration and it's included in prompts for context.
   - Encore `cache.IntKeyspace.Set()` returns only `error` (1 value), not `(int64, error)` — unlike `Increment` which returns `(int64, error)`
   - Encore migrations must be sequentially numbered (1, 2, 3...) — gaps cause errors. Renumbered from spec's 1,3 to 1,2
   - `cache.NewIntKeyspace[int64]` uses the key type as generic param, not the value type
+---
+
+## 2026-03-10 - bd-3it.1.6
+- Created rate plan CRUD (CreateRatePlan, UpdateRatePlan, ListRatePlans, GetRatePlan), prefix rate management (AddPrefixRate, RemovePrefixRate), multi-tier rate resolution (ResolveRate), and user rate config (SetUserRateConfig)
+- Created migration `3_create_rate_plans.up.sql` with `rate_plans` and `rate_plan_prefixes` tables
+- Added finalize tests (refund, zero-duration, block rounding) and rate plan tests (uniform, prefix, user priority, no-rate-found, admin-only access)
+- Files changed: `billing/rates.go` (new), `billing/migrations/3_create_rate_plans.up.sql` (new), `billing/billing_test.go` (appended)
+- **Learnings:**
+  - Encore path params (`:id`, `:prefix`) must be separate function parameters, NOT struct fields with `path` tags. For path+body: `func Foo(ctx, id int64, p *Body)`
+  - `sqldb.ErrNoRows` has no `.Is()` method — must use `errors.Is(err, sqldb.ErrNoRows)`
+  - Cross-service auth checking: import auth package with alias (`authpkg "encore.app/auth"`) and use `authpkg.Data()` to access `AuthData` struct
+  - `scanRatePlan` helper with `interface{ Scan(...any) error }` works for both `QueryRow` and `Rows.Next()` scanning
 ---
