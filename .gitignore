@@ -1,1 +1,7 @@
 /.encore
+encore.gen.go
+encore.gen.cue
+/encore.gen
+
+# bv (beads viewer) local config and caches
+.bv/

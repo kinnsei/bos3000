@@ -1,0 +1,102 @@
+{
+  "version": 1,
+  "sessionId": "529cda9e-2127-42bf-a62b-f9fdbdd149de",
+  "status": "running",
+  "startedAt": "2026-03-10T09:18:26.350Z",
+  "updatedAt": "2026-03-10T09:20:08.325Z",
+  "currentIteration": 0,
+  "maxIterations": 10,
+  "tasksCompleted": 0,
+  "isPaused": false,
+  "agentPlugin": "claude",
+  "trackerState": {
+    "plugin": "beads-rust",
+    "epicId": "bd-3it.1",
+    "totalTasks": 13,
+    "tasks": [
+      {
+        "id": "bd-3it.1.1",
+        "title": "[P01-W1-T01] Create shared error codes and types packages",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "bd-3it.1.2",
+        "title": "[P01-W1-T02] Create docker-compose.dev.yml and document port configuration",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "bd-3it.1.3",
+        "title": "[P01-W2-T01] Auth service foundation -- migrations, service struct, auth handler, login",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "bd-3it.1.4",
+        "title": "[P01-W2-T02] API Key management and IP whitelist CRUD",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "bd-3it.1.5",
+        "title": "[P01-W2-T01] Billing migrations, service struct, and balance pre-deduction",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "bd-3it.1.6",
+        "title": "[P01-W2-T02] Finalize billing and rate plan CRUD with multi-tier resolution",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "bd-3it.1.7",
+        "title": "[P01-W2-T03] Admin billing operations -- topup, deduction, account management",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "bd-3it.1.8",
+        "title": "[P01-W3-T01] Gateway migrations, service struct, and A-leg weighted round-robin",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "bd-3it.1.9",
+        "title": "[P01-W3-T02] B-leg prefix matching with failover and INFR-03 consistency check",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "bd-3it.1.10",
+        "title": "[P01-W3-T03] DID number pool management and caller ID selection",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "bd-3it.1.11",
+        "title": "[P01-W3-T04] Gateway health check cron job",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "bd-3it.1.12",
+        "title": "[P01-W2-T01] Blacklist checking and CRUD, daily rate limiting",
+        "status": "open",
+        "completedInSession": false
+      },
+      {
+        "id": "bd-3it.1.13",
+        "title": "[P01-W2-T02] Async audit logging via Pub/Sub",
+        "status": "open",
+        "completedInSession": false
+      }
+    ]
+  },
+  "iterations": [],
+  "skippedTaskIds": [],
+  "cwd": "/Users/kinnsei/ai/bos3000",
+  "activeTaskIds": [],
+  "subagentPanelVisible": false
+}

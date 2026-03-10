@@ -1,0 +1,14 @@
+{
+  "id": "529cda9e-2127-42bf-a62b-f9fdbdd149de",
+  "status": "running",
+  "startedAt": "2026-03-10T09:18:26.233Z",
+  "updatedAt": "2026-03-10T09:18:26.233Z",
+  "agentPlugin": "claude",
+  "trackerPlugin": "beads-rust",
+  "epicId": "bd-3it.1",
+  "currentIteration": 0,
+  "maxIterations": 10,
+  "totalTasks": 0,
+  "tasksCompleted": 0,
+  "cwd": "/Users/kinnsei/ai/bos3000"
+}

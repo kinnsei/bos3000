@@ -74,3 +74,14 @@ None yet.
 Last session: 2026-03-10T08:30:17.112Z
 Stopped at: Phase 5 context gathered
 Resume file: .planning/phases/05-client-portal/05-CONTEXT.md
+
+## Execution Moved to Beads
+
+As of 2026-03-10T09:04Z, task execution is tracked in Beads-rust.
+GSD STATE.md is no longer the source of truth for progress.
+
+Commands:
+  br list          # Current task status
+  br ready         # Tasks available for execution
+  bv               # Visual dependency graph
+  bv --robot-triage # AI-friendly status report

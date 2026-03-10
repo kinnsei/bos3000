@@ -1,0 +1,12 @@
+{
+    "mcpServers": {
+        "encore-mcp": {
+            "args": [
+                "mcp",
+                "run",
+                "--app=bos3000-bdpi"
+            ],
+            "command": "encore"
+        }
+    }
+}

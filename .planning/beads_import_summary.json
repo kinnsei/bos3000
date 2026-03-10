@@ -1,0 +1,17 @@
+{
+  "epic_id": "bd-3it",
+  "milestone": "BOS3000 API 回拨双呼系统",
+  "phases": 5,
+  "tasks": 55,
+  "checkpoints": 0,
+  "deps": 72,
+  "ready": 4,
+  "failures": 0,
+  "phase_ids": {
+    "1": "bd-3it.1",
+    "2": "bd-3it.2",
+    "3": "bd-3it.3",
+    "4": "bd-3it.4",
+    "5": "bd-3it.5"
+  }
+}
