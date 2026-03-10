@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"math"
+	"slices"
 	"testing"
 
 	"encore.dev/beta/errs"
@@ -150,5 +151,112 @@ func TestPickALegNoHealthy(t *testing.T) {
 	}
 	if errResp.Code != errs.Unavailable {
 		t.Errorf("expected Unavailable, got %v", errResp.Code)
+	}
+}
+
+// --- B-leg tests ---
+
+func seedBLegGateway(t *testing.T, ctx context.Context, name, sipAddr string, healthy bool, failoverID *int64) int64 {
+	t.Helper()
+	var id int64
+	err := db.QueryRow(ctx, `
+		INSERT INTO gateways (name, type, sip_address, weight, healthy, enabled, failover_gateway_id)
+		VALUES ($1, 'b_leg', $2, 1, $3, true, $4)
+		RETURNING id
+	`, name, sipAddr, healthy, failoverID).Scan(&id)
+	if err != nil {
+		t.Fatalf("failed to seed b-leg gateway %s: %v", name, err)
+	}
+	return id
+}
+
+func seedPrefix(t *testing.T, ctx context.Context, gatewayID int64, prefix string, priority int) {
+	t.Helper()
+	_, err := db.Exec(ctx, `
+		INSERT INTO gateway_prefixes (gateway_id, prefix, priority)
+		VALUES ($1, $2, $3)
+	`, gatewayID, prefix, priority)
+	if err != nil {
+		t.Fatalf("failed to seed prefix %s for gateway %d: %v", prefix, gatewayID, err)
+	}
+}
+
+func TestPickBLegPrefixMatch(t *testing.T) {
+	ctx := context.Background()
+	clearGateways(t, ctx)
+
+	gwID := seedBLegGateway(t, ctx, "BLeg-138", "sip:138@carrier.com", true, nil)
+	seedPrefix(t, ctx, gwID, "138", 1)
+
+	svc := &Service{}
+	resp, err := svc.PickBLeg(ctx, &PickBLegParams{CalledNumber: "13812345678"})
+	if err != nil {
+		t.Fatalf("PickBLeg: %v", err)
+	}
+	if resp.GatewayID != gwID {
+		t.Errorf("expected gateway %d, got %d", gwID, resp.GatewayID)
+	}
+	if resp.Name != "BLeg-138" {
+		t.Errorf("expected name BLeg-138, got %s", resp.Name)
+	}
+}
+
+func TestPickBLegFailover(t *testing.T) {
+	ctx := context.Background()
+	clearGateways(t, ctx)
+
+	// Create failover gateway first (healthy)
+	failoverID := seedBLegGateway(t, ctx, "BLeg-Failover", "sip:failover@carrier.com", true, nil)
+
+	// Create primary gateway (unhealthy) with failover
+	primaryID := seedBLegGateway(t, ctx, "BLeg-Primary", "sip:primary@carrier.com", false, &failoverID)
+	seedPrefix(t, ctx, primaryID, "139", 1)
+
+	svc := &Service{}
+	resp, err := svc.PickBLeg(ctx, &PickBLegParams{CalledNumber: "13912345678"})
+	if err != nil {
+		t.Fatalf("PickBLeg: %v", err)
+	}
+	if resp.GatewayID != failoverID {
+		t.Errorf("expected failover gateway %d, got %d", failoverID, resp.GatewayID)
+	}
+	if resp.Name != "BLeg-Failover" {
+		t.Errorf("expected BLeg-Failover, got %s", resp.Name)
+	}
+}
+
+func TestPickBLegUnknownPrefix(t *testing.T) {
+	ctx := context.Background()
+	clearGateways(t, ctx)
+
+	svc := &Service{}
+	_, err := svc.PickBLeg(ctx, &PickBLegParams{CalledNumber: "99912345678"})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	var errResp *errs.Error
+	if !errors.As(err, &errResp) {
+		t.Fatalf("expected *errs.Error, got %T", err)
+	}
+	if errResp.Code != errs.NotFound {
+		t.Errorf("expected NotFound, got %v", errResp.Code)
+	}
+}
+
+func TestPrefixConsistencyWarning(t *testing.T) {
+	ctx := context.Background()
+	clearGateways(t, ctx)
+
+	// Setup a B-leg gateway with prefix "138" but no matching rate plan prefix
+	gwID := seedBLegGateway(t, ctx, "BLeg-Mismatch", "sip:mismatch@carrier.com", true, nil)
+	seedPrefix(t, ctx, gwID, "138", 1)
+
+	svc := &Service{}
+	gwOnly, _ := svc.GetPrefixMismatches(ctx)
+
+	// "138" should be in gateway-only list since no rate plan has it
+	if !slices.Contains(gwOnly, "138") {
+		t.Errorf("expected prefix '138' in gateway-only mismatches, got %v", gwOnly)
 	}
 }

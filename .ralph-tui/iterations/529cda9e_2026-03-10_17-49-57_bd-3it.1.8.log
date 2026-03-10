@@ -1,0 +1,158 @@
+# Iteration 10 Log
+
+## Metadata
+
+- **Task ID**: bd-3it.1.8
+- **Task Title**: [P01-W3-T01] Gateway migrations, service struct, and A-leg weighted round-robin
+- **Description**: ## Action
+
+Create `routing/migrations/1_create_gateways.up.sql`:
+```sql
+CREATE TABLE gateways (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    type VARCHAR(10) NOT NULL CHECK (type ...
+- **Status**: completed
+- **Task Completed**: Yes
+- **Promise Detected**: Yes
+- **Started At**: 2026-03-10T09:49:57.988Z
+- **Ended At**: 2026-03-10T09:54:04.799Z
+- **Duration**: 4m 6s
+- **Input Tokens**: 98
+- **Output Tokens**: 12519
+- **Total Tokens**: 12617
+- **Agent**: claude
+- **Model**: claude-opus-4-6
+- **Epic**: bd-3it.1
+- **Sandbox Mode**: auto
+- **Sandbox Network**: Enabled
+--- RAW OUTPUT ---
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/.ralph-tui/progress.md[0m
+[94m[Glob][0m pattern: [96mrouting/**/*[0m
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/.claude/projects/-Users-kinnsei-ai-bos3000/memory/MEMORY.md[0m
+
+[91m[Error: File does not exist. Note: your current working directory is /Users/kinnsei/ai/bos3000.][0m
+No routing service exists yet. Let me check existing service patterns for reference.
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/billing/billing.go[0m
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/billing/rates.go[0m
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/billing/migrations/3_create_rate_plans.up.sql[0m
+Good, I have the patterns. Now let me also check the auth test patterns for reference.
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/billing/billing_test.go[0m
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/auth/auth.go[0m
+Now I have all the patterns I need. Let me implement everything.
+[94m[ToolSearch][0m query: [93mselect:TodoWrite[0m
+[94m[TodoWrite][0m
+[94m[Bash][0m Create routing service directories $ mkdir -p /Users/kinnsei/ai/bos3000/routing/migrations
+[94m[Write][0m [95m/Users/kinnsei/ai/bos3000/routing/migrations/1_create_gateways.up.sql[0m "CREATE TABLE gateways (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    type VARCHAR(10) NOT NULL CHECK (type IN ('a_leg', 'b_leg')),
+    sip_address VARCHAR(255) NOT NULL,
+    weigh... (942 chars)"
+[94m[TodoWrite][0m
+[94m[Write][0m [95m/Users/kinnsei/ai/bos3000/routing/routing.go[0m "package routing
+
+import (
+	"context"
+	"sync"
+
+	"encore.dev/rlog"
+	"encore.dev/storage/sqldb"
+)
+
+var db = sqldb.NewDatabase("routing", sqldb.DatabaseConfig{
+	Migrations: "./migrations",
+})
+
+// Weighted... (3104 chars)"
+[94m[TodoWrite][0m
+[94m[Write][0m [95m/Users/kinnsei/ai/bos3000/routing/aleg.go[0m "package routing
+
+import (
+	"context"
+	"time"
+
+	"encore.dev/beta/errs"
+
+	authpkg "encore.app/auth"
+	"encore.app/pkg/errcode"
+)
+
+func requireAdmin() error {
+	data := authpkg.Data()
+	if data == nil || da... (7911 chars)"
+Now let me check what error codes exist and if `NoHealthyGateway` is already defined.
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/pkg/errcode/codes.go[0m
+`NewError` takes 3 args (errs.ErrCode, bizCode, message). Let me fix that.
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/routing/aleg.go[0m edit: "		return nil, errcode.NewError(errcode.NoHealthyGa..." → "		return nil, errcode.NewError(errs.Unavailable, e..."
+Now create the tests.
+[94m[TodoWrite][0m
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/routing/aleg.go[0m edit: "	args := []interface{}{}" → "	args := []any{}"
+[94m[Write][0m [95m/Users/kinnsei/ai/bos3000/routing/routing_test.go[0m "package routing
+
+import (
+	"context"
+	"errors"
+	"math"
+	"testing"
+
+	"encore.dev/beta/errs"
+)
+
+func seedGateways(t *testing.T, ctx context.Context, gateways []struct {
+	Name       string
+	SIPAddress st... (3580 chars)"
+[94m[TodoWrite][0m
+Let me fix the Go 1.22+ range-over-int style.
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/routing/routing_test.go[0m edit: "	for i := 0; i < iterations; i++ {
+		resp, err := ..." → "	for i := range iterations {
+		resp, err := svc.Pi..."
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/routing/routing_test.go[0m edit: "	for i := 0; i < 100; i++ {
+		resp, err := svc.Pic..." → "	for i := range 100 {
+		resp, err := svc.PickALeg(..."
+Now let me run the tests.
+[94m[Bash][0m Run routing tests $ encore test ./routing/... -run "TestPickALeg" -v 2>&1
+
+[91m[Error: Exit code 1
+
+── Invalid call ───────────────────────────────────────────────────────────────────────────[E1183]──
+
+sqldb.Named cannot be called here. It must be called from a package level variable.
+
+     ╭─[ /Users/kinnsei/ai/bos3000/routing/routing.go:99:15 ]
+     │
+  97 │ 
+  98 │     // Read rate plan prefixes from billing DB
+  99 │     billingDB := sqldb.Named("billing")
+     ⋮                  ───────────
+ 100 │     rpPrefixes := make(map[string]bool)
+ 101 │     rpRows, err := billingDB.Query(ctx, `SELECT DISTINCT prefix FROM rate_plan_prefixes`)
+─────╯][0m
+`sqldb.Named` must be package-level. Let me fix that.
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/routing/routing.go[0m edit: "var db = sqldb.NewDatabase("routing", sqldb.Databa..." → "var db = sqldb.NewDatabase("routing", sqldb.Databa..."
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/routing/routing.go[0m edit: "	// Read rate plan prefixes from billing DB
+	billi..." → "	// Read rate plan prefixes from billing DB
+	rpPre..."
+[94m[Bash][0m Run routing tests $ encore test ./routing/... -run "TestPickALeg" -v 2>&1
+All 3 tests pass. Let me also run `encore check` to verify compilation.
+[94m[Bash][0m Check for compile errors $ encore check 2>&1
+[94m[TodoWrite][0m
+Now close the bead and update progress.
+[94m[Bash][0m Close the bead $ br close bd-3it.1.8 --reason "Gateway migrations, routing service with prefix validation, A-leg weig...
+[94m[Bash][0m Flush tracker state $ br sync --flush-only 2>&1
+Now update progress.md.
+[94m[Read][0m [95m/Users/kinnsei/ai/bos3000/.ralph-tui/progress.md[0m
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/.ralph-tui/progress.md[0m edit: "  - `db.Exec` returns a result with `RowsAffected(..." → "  - `db.Exec` returns a result with `RowsAffected(..."
+Also add the `sqldb.Named` learning to the codebase patterns section.
+[94m[Edit][0m [95m/Users/kinnsei/ai/bos3000/.ralph-tui/progress.md[0m edit: "- **Admin login as raw endpoint**: Encore structur..." → "- **Admin login as raw endpoint**: Encore structur..."
+[94m[TodoWrite][0m
+All done. Summary of what was implemented:
+
+- **`routing/migrations/1_create_gateways.up.sql`** — `gateways` table (a_leg/b_leg, weight, health, failover) + `gateway_prefixes` table
+- **`routing/routing.go`** — Service struct with mutex-protected A-leg gateway pool, `initService` loads from DB, `validatePrefixConsistency` cross-checks gateway prefixes vs billing rate plan prefixes (advisory, non-blocking)
+- **`routing/aleg.go`** — `PickALeg` (private POST, smooth weighted RR nginx algorithm), 4 admin CRUD endpoints (Create/Update/List/Toggle), auto-reloads A-leg pool on mutations
+- **`routing/routing_test.go`** — 3 tests all passing: weighted distribution (1000 iterations, ±5%), skips unhealthy/disabled, returns 503 when none available
+
+Key learning: `sqldb.Named()` must be a package-level variable in Encore.
+
+<promise>COMPLETE</promise>

@@ -130,6 +130,19 @@ after each iteration and it's included in prompts for context.
   - `db.Exec` returns a result with `RowsAffected()` method (int64) for counting affected rows
 ---
 
+## 2026-03-10 - bd-3it.1.9
+- Created `routing/bleg.go` with PickBLeg (prefix matching + failover chain), AddPrefix, RemovePrefix, ListPrefixes, and GetPrefixMismatches
+- PickBLeg: extracts 3-digit prefix, queries gateway_prefixes by priority, picks first healthy gateway, follows failover_gateway_id chain (max 3 hops)
+- Returns PREFIX_NOT_FOUND (no prefix match) or NO_HEALTHY_GATEWAY (prefix matched but all down)
+- GetPrefixMismatches: exported testable version of consistency check comparing gateway vs billing rate plan prefixes
+- Added 4 tests: TestPickBLegPrefixMatch, TestPickBLegFailover, TestPickBLegUnknownPrefix, TestPrefixConsistencyWarning — all passing
+- Files changed: `routing/bleg.go` (new), `routing/routing_test.go` (appended)
+- **Learnings:**
+  - `followFailover` pattern: iterative loop with hop counter prevents infinite loops in failover chains
+  - B-leg gateway selection is priority-ordered (not weighted RR like A-leg) — first healthy wins
+  - `GetPrefixMismatches` export pattern avoids needing rlog capture in tests — just return the mismatch lists
+---
+
 ## 2026-03-10 - bd-3it.1.8
 - Created routing service with gateway migrations, A-leg weighted round-robin, and gateway admin CRUD
 - Files changed: `routing/routing.go` (new), `routing/aleg.go` (new), `routing/routing_test.go` (new), `routing/migrations/1_create_gateways.up.sql` (new)
