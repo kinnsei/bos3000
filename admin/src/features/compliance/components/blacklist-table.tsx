@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import type { ColumnDef, PaginationState } from '@tanstack/react-table'
 import { DataTable } from '@/components/shared/data-table'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
@@ -16,91 +16,64 @@ import {
 } from '@/components/ui/dialog'
 import { Plus, Upload, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-
-interface BlacklistItem {
-  id: string
-  number: string
-  reason: string
-  added_by: string
-  created_at: string
-}
-
-const MOCK_DATA: BlacklistItem[] = [
-  { id: '1', number: '13800138001', reason: '骚扰电话投诉', added_by: 'admin', created_at: '2026-03-10T08:12:00Z' },
-  { id: '2', number: '13900139002', reason: '欺诈行为', added_by: 'admin', created_at: '2026-03-09T14:30:00Z' },
-  { id: '3', number: '15012345678', reason: '恶意呼叫', added_by: 'zhangsan', created_at: '2026-03-09T10:05:00Z' },
-  { id: '4', number: '18611112222', reason: '违规营销', added_by: 'admin', created_at: '2026-03-08T16:45:00Z' },
-  { id: '5', number: '13512348765', reason: '用户投诉多次', added_by: 'lisi', created_at: '2026-03-08T09:20:00Z' },
-  { id: '6', number: '17788889999', reason: '机器人拨号', added_by: 'admin', created_at: '2026-03-07T11:30:00Z' },
-  { id: '7', number: '13611223344', reason: '骚扰电话投诉', added_by: 'zhangsan', created_at: '2026-03-07T08:00:00Z' },
-  { id: '8', number: '15899887766', reason: '欺诈行为', added_by: 'admin', created_at: '2026-03-06T15:10:00Z' },
-  { id: '9', number: '18233445566', reason: '号码异常', added_by: 'lisi', created_at: '2026-03-06T12:25:00Z' },
-  { id: '10', number: '13055667788', reason: '违规营销', added_by: 'admin', created_at: '2026-03-05T17:40:00Z' },
-  { id: '11', number: '17600112233', reason: '恶意呼叫', added_by: 'zhangsan', created_at: '2026-03-05T09:55:00Z' },
-  { id: '12', number: '13344556677', reason: '骚扰电话投诉', added_by: 'admin', created_at: '2026-03-04T14:15:00Z' },
-  { id: '13', number: '15188990011', reason: '用户投诉多次', added_by: 'lisi', created_at: '2026-03-04T10:30:00Z' },
-  { id: '14', number: '18922334455', reason: '欺诈行为', added_by: 'admin', created_at: '2026-03-03T16:00:00Z' },
-  { id: '15', number: '13766778899', reason: '机器人拨号', added_by: 'zhangsan', created_at: '2026-03-03T08:45:00Z' },
-]
-
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
+import { useBlacklist, useAddBlacklist, useRemoveBlacklist } from '@/lib/api/hooks'
+import type { BlacklistEntry } from '@/lib/api/client'
 
 export function BlacklistTable() {
-  const [data, setData] = useState<BlacklistItem[]>(MOCK_DATA)
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 10 })
   const [addOpen, setAddOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [newNumber, setNewNumber] = useState('')
   const [newReason, setNewReason] = useState('')
 
-  const paginatedData = useMemo(() => {
-    const start = pagination.pageIndex * pagination.pageSize
-    return data.slice(start, start + pagination.pageSize)
-  }, [data, pagination])
+  const { data, isLoading } = useBlacklist({ page: pagination.pageIndex + 1, limit: pagination.pageSize })
+  const addMutation = useAddBlacklist()
+  const removeMutation = useRemoveBlacklist()
 
-  const handleRemove = (item: BlacklistItem) => {
-    setData((prev) => prev.filter((d) => d.id !== item.id))
-    toast.success(`已移除号码 ${item.number}`)
-  }
+  const entries = data?.entries ?? []
+  const totalCount = data?.total ?? entries.length
 
-  const handleAdd = () => {
-    if (!newNumber.trim()) return
-    const entry: BlacklistItem = {
-      id: String(Date.now()),
-      number: newNumber.trim(),
-      reason: newReason.trim() || '手动添加',
-      added_by: 'admin',
-      created_at: new Date().toISOString(),
+  const handleRemove = async (item: BlacklistEntry) => {
+    try {
+      await removeMutation.mutateAsync({ id: String(item.id) })
+      toast.success(`已移除号码 ${item.number}`)
+    } catch {
+      toast.error('移除失败')
     }
-    setData((prev) => [entry, ...prev])
-    setNewNumber('')
-    setNewReason('')
-    setAddOpen(false)
-    toast.success(`已添加号码 ${entry.number} 到黑名单`)
   }
 
-  const handleBulkImport = (rows: Record<string, string>[]) => {
-    const entries: BlacklistItem[] = rows.map((row, i) => ({
-      id: String(Date.now() + i),
-      number: row.number,
-      reason: row.reason || '批量导入',
-      added_by: 'admin',
-      created_at: new Date().toISOString(),
-    }))
-    setData((prev) => [...entries, ...prev])
+  const handleAdd = async () => {
+    if (!newNumber.trim()) return
+    try {
+      await addMutation.mutateAsync({
+        number: newNumber.trim(),
+        reason: newReason.trim() || '手动添加',
+      })
+      setNewNumber('')
+      setNewReason('')
+      setAddOpen(false)
+      toast.success(`已添加号码 ${newNumber.trim()} 到黑名单`)
+    } catch {
+      toast.error('添加失败')
+    }
+  }
+
+  const handleBulkImport = async (rows: Record<string, string>[]) => {
+    let success = 0
+    for (const row of rows) {
+      try {
+        await addMutation.mutateAsync({
+          number: row.number,
+          reason: row.reason || '批量导入',
+        })
+        success++
+      } catch { /* continue */ }
+    }
     setImportOpen(false)
-    toast.success(`已导入 ${entries.length} 条记录`)
+    toast.success(`已导入 ${success} 条记录`)
   }
 
-  const columns: ColumnDef<BlacklistItem, unknown>[] = [
+  const columns: ColumnDef<BlacklistEntry, unknown>[] = [
     {
       accessorKey: 'number',
       header: '号码',
@@ -113,13 +86,9 @@ export function BlacklistTable() {
       header: '原因',
     },
     {
-      accessorKey: 'added_by',
+      accessorKey: 'created_by',
       header: '添加人',
-    },
-    {
-      accessorKey: 'created_at',
-      header: '添加时间',
-      cell: ({ row }) => formatDate(row.original.created_at),
+      cell: ({ row }) => `用户#${row.original.created_by}`,
     },
     {
       id: 'actions',
@@ -177,7 +146,7 @@ export function BlacklistTable() {
             <Button variant="outline" onClick={() => setAddOpen(false)}>
               取消
             </Button>
-            <Button onClick={handleAdd} disabled={!newNumber.trim()}>
+            <Button onClick={handleAdd} disabled={!newNumber.trim() || addMutation.isPending}>
               确认添加
             </Button>
           </DialogFooter>
@@ -204,10 +173,11 @@ export function BlacklistTable() {
   return (
     <DataTable
       columns={columns}
-      data={paginatedData}
-      totalCount={data.length}
+      data={entries}
+      totalCount={totalCount}
       pagination={pagination}
       onPaginationChange={setPagination}
+      isLoading={isLoading}
       toolbar={toolbar}
     />
   )

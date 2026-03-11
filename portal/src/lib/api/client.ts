@@ -198,7 +198,7 @@ class CallbackService {
   }
 
   async listCDRs(params: PaginatedParams & { start_date?: string; end_date?: string; status?: string; search?: string }): Promise<{ cdrs: CDR[]; total: number }> {
-    const resp = await request<{ callbacks: CDR[]; total: number }>(
+    const resp = await request<{ items: CDR[]; total: number }>(
       `/api/callbacks${qs({
         page: params.page,
         page_size: params.limit,
@@ -207,14 +207,14 @@ class CallbackService {
         status: params.status,
       })}`
     )
-    return { cdrs: resp.callbacks || [], total: resp.total || 0 }
+    return { cdrs: resp.items || [], total: resp.total || 0 }
   }
 
   async listActiveCalls(): Promise<{ calls: CDR[] }> {
-    const resp = await request<{ callbacks: CDR[]; total: number }>(
+    const resp = await request<{ items: CDR[]; total: number }>(
       `/api/callbacks${qs({ page: 1, page_size: 100, status: 'in_progress' })}`
     )
-    return { calls: resp.callbacks || [] }
+    return { calls: resp.items || [] }
   }
 
   async hangupCall(params: { call_id: string }): Promise<void> {

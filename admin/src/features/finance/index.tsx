@@ -14,41 +14,28 @@ import { toast } from 'sonner'
 import { TransactionTable } from './components/transaction-table'
 import { RatePlanSheet, type RatePlanFormData, type RatePlanForEdit } from './components/rate-plan-sheet'
 import { ProfitAnalysis } from './components/profit-analysis'
-
-interface RatePlan {
-  id: string
-  name: string
-  description?: string
-  rate_per_minute: number
-  billing_increment: number
-  connection_fee: number
-  b_leg_rates?: { prefix: string; rate: number }[]
-  min_billing_duration?: number
-}
-
-const mockRatePlans: RatePlan[] = [
-  { id: 'rp_01', name: '标准套餐', description: '适用于普通客户', rate_per_minute: 0.15, billing_increment: 6, connection_fee: 0.05, b_leg_rates: [{ prefix: '010', rate: 0.08 }], min_billing_duration: 6 },
-  { id: 'rp_02', name: 'VIP套餐', description: '大客户专享', rate_per_minute: 0.10, billing_increment: 1, connection_fee: 0, b_leg_rates: [{ prefix: '010', rate: 0.05 }, { prefix: '021', rate: 0.06 }], min_billing_duration: 0 },
-  { id: 'rp_03', name: '国际线路', description: '国际呼叫', rate_per_minute: 0.80, billing_increment: 60, connection_fee: 0.50, b_leg_rates: [], min_billing_duration: 60 },
-  { id: 'rp_04', name: '经济套餐', rate_per_minute: 0.20, billing_increment: 6, connection_fee: 0.10, b_leg_rates: [], min_billing_duration: 6 },
-]
+import { useRatePlans, useCreateRatePlan } from '@/lib/api/hooks'
+import type { RatePlan } from '@/lib/api/client'
 
 const ratePlanColumns: ColumnDef<RatePlan, unknown>[] = [
   { accessorKey: 'name', header: '名称' },
   {
-    accessorKey: 'rate_per_minute',
-    header: '费率/分钟',
-    cell: ({ row }) => <span className="font-mono">¥{row.original.rate_per_minute.toFixed(2)}</span>,
+    accessorKey: 'mode',
+    header: '模式',
   },
   {
-    accessorKey: 'billing_increment',
-    header: '计费增量',
-    cell: ({ row }) => `${row.original.billing_increment}秒`,
+    accessorKey: 'uniform_a_rate',
+    header: 'A路费率(分/分钟)',
+    cell: ({ row }) => <span className="font-mono">{row.original.uniform_a_rate}</span>,
   },
   {
-    accessorKey: 'connection_fee',
-    header: '接通费',
-    cell: ({ row }) => <span className="font-mono">¥{row.original.connection_fee.toFixed(2)}</span>,
+    accessorKey: 'uniform_b_rate',
+    header: 'B路费率(分/分钟)',
+    cell: ({ row }) => <span className="font-mono">{row.original.uniform_b_rate}</span>,
+  },
+  {
+    accessorKey: 'description',
+    header: '描述',
   },
 ]
 
@@ -58,13 +45,25 @@ export default function Finance() {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editingPlan, setEditingPlan] = useState<RatePlanForEdit | undefined>(undefined)
 
+  const { data: ratePlanData, isLoading } = useRatePlans()
+  const createMutation = useCreateRatePlan()
+
+  const ratePlans = ratePlanData?.plans ?? []
+
   const handleCreatePlan = useCallback(() => {
     setEditingPlan(undefined)
     setSheetOpen(true)
   }, [])
 
   const handleEditPlan = useCallback((plan: RatePlan) => {
-    setEditingPlan(plan)
+    setEditingPlan({
+      id: String(plan.id),
+      name: plan.name,
+      description: plan.description,
+      rate_per_minute: plan.uniform_a_rate / 100,
+      billing_increment: 6,
+      connection_fee: 0,
+    })
     setSheetOpen(true)
   }, [])
 
@@ -72,9 +71,22 @@ export default function Finance() {
     toast.success(`已删除模板: ${plan.name}`)
   }, [])
 
-  const handleSubmitPlan = useCallback(async (_data: RatePlanFormData) => {
-    toast.success(editingPlan ? '模板已更新' : '模板已创建')
-  }, [editingPlan])
+  const handleSubmitPlan = useCallback(async (data: RatePlanFormData) => {
+    try {
+      await createMutation.mutateAsync({
+        name: data.name,
+        mode: 'uniform',
+        uniform_a_rate: Math.round(data.rate_per_minute * 100),
+        uniform_b_rate: Math.round(data.rate_per_minute * 100),
+        description: data.description,
+        created_at: '',
+        updated_at: '',
+      })
+      toast.success(editingPlan ? '模板已更新' : '模板已创建')
+    } catch {
+      toast.error('操作失败')
+    }
+  }, [editingPlan, createMutation])
 
   const rpColumnsWithActions = useMemo<ColumnDef<RatePlan, unknown>[]>(() => [
     ...ratePlanColumns,
@@ -127,13 +139,13 @@ export default function Finance() {
         <TabsContent value="rate-plans" className="mt-4">
           <DataTable
             columns={rpColumnsWithActions}
-            data={mockRatePlans}
-            totalCount={mockRatePlans.length}
+            data={ratePlans}
+            totalCount={ratePlans.length}
             pagination={rpPagination}
             onPaginationChange={setRpPagination}
             sorting={rpSorting}
             onSortingChange={setRpSorting}
-            isLoading={false}
+            isLoading={isLoading}
             toolbar={
               <div className="flex justify-end">
                 <Button onClick={handleCreatePlan}>

@@ -173,7 +173,7 @@ export function useTestOriginate() {
 
 // --- CDR ---
 
-export function useCDRs(params: PaginatedParams & { start_date?: string; end_date?: string }) {
+export function useCDRs(params: PaginatedParams & { start_date?: string; end_date?: string; status?: string }) {
   return useQuery({
     queryKey: ['cdr', params],
     queryFn: () => api.callback.ListCDRs(params),

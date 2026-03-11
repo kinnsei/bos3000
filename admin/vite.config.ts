@@ -14,12 +14,12 @@ export default defineConfig(({ command }) => ({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:12345',
+        target: process.env.ENCORE_URL || 'http://localhost:4000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
       '/ws': {
-        target: 'http://localhost:12345',
+        target: process.env.ENCORE_URL || 'http://localhost:4000',
         changeOrigin: true,
         ws: true,
       },

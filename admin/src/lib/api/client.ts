@@ -114,15 +114,20 @@ export interface TestOriginateResult {
 }
 
 export interface CDR {
-  id: string
   call_id: string
+  user_id: number
   a_number: string
   b_number: string
   status: string
+  bridge_duration_ms: number
+  total_cost: number
+  failure_reason?: string
+  created_at: string
+  // computed helpers
+  caller: string
+  callee: string
   duration: number
   cost: number
-  created_at: string
-  ended_at: string
 }
 
 export interface Transaction {
@@ -138,32 +143,39 @@ export interface Transaction {
 export interface RatePlan {
   id: number
   name: string
-  rate_per_minute: number
-  billing_increment: number
-  connection_fee: number
+  mode: string
+  uniform_a_rate: number
+  uniform_b_rate: number
+  description?: string
+  created_at: string
+  updated_at: string
 }
 
 export interface DIDNumber {
   id: number
   number: string
   status: string
-  assigned_user_id: number | null
+  assigned_user_id?: number | null
+  created_at: string
 }
 
 export interface BlacklistEntry {
   id: number
   number: string
+  user_id: number | null
   reason: string
-  created_at: string
+  created_by: number
 }
 
 export interface AuditLog {
   id: number
   action: string
   actor_id: number
+  actor_name?: string
   target_type: string
   target_id: string
   details: string
+  ip_address?: string
   created_at: string
 }
 
@@ -280,8 +292,7 @@ class BillingService {
   }
 
   async ListRatePlans(): Promise<{ plans: RatePlan[] }> {
-    const resp = await request<{ rate_plans: RatePlan[] }>('/api/billing/rate-plans')
-    return { plans: resp.rate_plans || [] }
+    return request('/api/billing/rate-plans')
   }
 
   async CreateRatePlan(params: Omit<RatePlan, 'id'>): Promise<{ id: string }> {
@@ -305,7 +316,8 @@ class RoutingService {
   }
 
   async ListDIDs(params: PaginatedParams): Promise<{ dids: DIDNumber[]; total: number }> {
-    return request(`/api/routing/dids${qs(params)}`)
+    const resp = await request<{ dids: DIDNumber[]; total_count: number }>(`/api/routing/dids${qs({ page: params.page, page_size: params.limit })}`)
+    return { dids: resp.dids || [], total: resp.total_count || 0 }
   }
 
   async ImportDIDs(params: { numbers: string[] }): Promise<{ imported: number }> {
@@ -341,18 +353,32 @@ class RoutingService {
 }
 
 class CallbackService {
-  async ListCDRs(params: PaginatedParams & { start_date?: string; end_date?: string }): Promise<{ cdrs: CDR[]; total: number }> {
-    const resp = await request<{ callbacks: CDR[]; total: number; page: number; page_size: number }>(
-      `/api/callbacks${qs({ page: params.page, page_size: params.limit, date_from: params.start_date, date_to: params.end_date })}`
+  async ListCDRs(params: PaginatedParams & { start_date?: string; end_date?: string; status?: string }): Promise<{ cdrs: CDR[]; total: number }> {
+    const resp = await request<{ items: Array<Omit<CDR, 'caller' | 'callee' | 'duration' | 'cost'>>; total: number }>(
+      `/api/callbacks${qs({ page: params.page, page_size: params.limit, date_from: params.start_date, date_to: params.end_date, status: params.status })}`
     )
-    return { cdrs: resp.callbacks || [], total: resp.total || 0 }
+    const cdrs = (resp.items || []).map((item) => ({
+      ...item,
+      caller: item.a_number,
+      callee: item.b_number,
+      duration: Math.round(item.bridge_duration_ms / 1000),
+      cost: item.total_cost / 100,
+    }))
+    return { cdrs, total: resp.total || 0 }
   }
 
   async ListActiveCalls(): Promise<{ calls: CDR[] }> {
-    const resp = await request<{ callbacks: CDR[]; total: number }>(
+    const resp = await request<{ items: Array<Omit<CDR, 'caller' | 'callee' | 'duration' | 'cost'>>; total: number }>(
       `/api/callbacks${qs({ page: 1, page_size: 100, status: 'in_progress' })}`
     )
-    return { calls: resp.callbacks || [] }
+    const calls = (resp.items || []).map((item) => ({
+      ...item,
+      caller: item.a_number,
+      callee: item.b_number,
+      duration: Math.round(item.bridge_duration_ms / 1000),
+      cost: item.total_cost / 100,
+    }))
+    return { calls }
   }
 
   async HangupCall(params: { call_id: string }): Promise<void> {
