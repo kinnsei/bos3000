@@ -74,13 +74,20 @@ func validateWSToken(tokenStr string) (userID string, isAdmin bool, err error) {
 		return "", false, fmt.Errorf("invalid claims")
 	}
 
-	uid, ok := claims["user_id"].(string)
-	if !ok || uid == "" {
-		return "", false, fmt.Errorf("missing user_id claim")
+	// Support both "user_id" and "sub" claim formats
+	uid, _ := claims["user_id"].(string)
+	if uid == "" {
+		uid, _ = claims["sub"].(string)
+	}
+	if uid == "" {
+		return "", false, fmt.Errorf("missing user_id/sub claim")
 	}
 
+	// Support both "is_admin" bool and "role" string formats
 	if admin, ok := claims["is_admin"].(bool); ok {
 		isAdmin = admin
+	} else if role, ok := claims["role"].(string); ok {
+		isAdmin = role == "admin"
 	}
 
 	return uid, isAdmin, nil

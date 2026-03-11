@@ -1,10 +1,30 @@
-# Start with: docker compose -f docker-compose.dev.yml up -d
-# Start with HA: docker compose -f docker-compose.dev.yml --profile ha up -d
-# Encore app: encore run --listen :12345
+# Full stack local deployment:
+#   1. encore run --listen :12345          (backend + databases)
+#   2. docker compose -f docker-compose.dev.yml up -d  (nginx + freeswitch)
+#
+# Access:
+#   Admin Dashboard: http://localhost:8080
+#   Client Portal:   http://localhost:8081
+#   Encore Dashboard: http://localhost:9400
+#
+# HA mode: docker compose -f docker-compose.dev.yml --profile ha up -d
 
 services:
+  nginx:
+    build:
+      context: .
+      dockerfile: docker/nginx/Dockerfile
+    container_name: bos3000-nginx
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - bos3000
+
   freeswitch-primary:
-    image: signalwire/freeswitch:1.10
+    image: safarov/freeswitch:latest
     container_name: bos3000-fs-primary
     ports:
       - "8021:8021"
@@ -25,7 +45,7 @@ services:
       - bos3000
 
   freeswitch-standby:
-    image: signalwire/freeswitch:1.10
+    image: safarov/freeswitch:latest
     container_name: bos3000-fs-standby
     ports:
       - "8022:8021"

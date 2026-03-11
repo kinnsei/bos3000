@@ -7,15 +7,14 @@ import { CustomerTable, type Customer } from './components/customer-table'
 import { CreateCustomerSheet, type CreateCustomerData } from './components/create-customer-sheet'
 import { BalanceDialog } from './components/balance-dialog'
 import { CustomerDetail } from './components/customer-detail'
-
-// Mock customer data
-const mockCustomers: Customer[] = [
-  { id: '1', company: '示例科技有限公司', email: 'admin@example.com', balance: 12500.50, status: 'active', max_concurrent: 50, daily_limit: 2000, created_at: '2025-12-01T08:00:00Z' },
-  { id: '2', company: '通达通信', email: 'ops@tongda.com', balance: 3200.00, status: 'active', max_concurrent: 20, daily_limit: 500, created_at: '2026-01-15T10:30:00Z' },
-  { id: '3', company: '汇联科技', email: 'tech@huilian.cn', balance: 0, status: 'frozen', max_concurrent: 10, daily_limit: 100, created_at: '2026-02-20T14:00:00Z' },
-  { id: '4', company: '星辰网络', email: 'admin@xingchen.net', balance: 45800.00, status: 'active', max_concurrent: 100, daily_limit: 5000, created_at: '2025-11-10T09:00:00Z' },
-  { id: '5', company: '云桥通讯', email: 'support@yunqiao.com', balance: 780.25, status: 'active', max_concurrent: 15, daily_limit: 300, created_at: '2026-03-01T16:45:00Z' },
-]
+import {
+  useCustomers,
+  useCreateCustomer,
+  useTopUpCustomer,
+  useDeductCustomer,
+  useFreezeUser,
+  useUnfreezeUser,
+} from '@/lib/api/hooks'
 
 export default function Customers() {
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 10 })
@@ -28,17 +27,49 @@ export default function Customers() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [detailId, setDetailId] = useState<string | null>(null)
 
-  // Filter mock data by search
-  const filtered = mockCustomers.filter((c) => {
-    if (!search) return true
-    const q = search.toLowerCase()
-    return c.company.toLowerCase().includes(q) || c.email.toLowerCase().includes(q)
+  const { data, isLoading } = useCustomers({
+    page: pagination.pageIndex + 1,
+    limit: pagination.pageSize,
+    search,
   })
 
-  const handleCreateSubmit = useCallback(async (_data: CreateCustomerData) => {
-    // Mock submit
-    toast.success('客户创建成功')
-  }, [])
+  const createMutation = useCreateCustomer()
+  const topUpMutation = useTopUpCustomer()
+  const deductMutation = useDeductCustomer()
+  const freezeMutation = useFreezeUser()
+  const unfreezeMutation = useUnfreezeUser()
+
+  // Map API response to table format
+  const customers: Customer[] = (data?.users || []).map((u) => ({
+    id: String(u.id),
+    company: u.username,
+    email: u.email,
+    balance: u.balance / 100, // cents to yuan
+    status: u.status,
+    max_concurrent: u.max_concurrent,
+    daily_limit: u.daily_limit,
+    created_at: u.created_at,
+  }))
+
+  const handleCreateSubmit = useCallback(
+    async (formData: CreateCustomerData) => {
+      try {
+        await createMutation.mutateAsync({
+          username: formData.company,
+          email: formData.email,
+          password: formData.password,
+          credit_limit: (formData.credit_limit || 0) * 100,
+          max_concurrent: formData.max_concurrent || 10,
+          daily_limit: formData.daily_limit || 1000,
+        })
+        toast.success('客户创建成功')
+        setCreateOpen(false)
+      } catch (err: any) {
+        toast.error(err?.message || '创建失败')
+      }
+    },
+    [createMutation],
+  )
 
   const handleTopUp = useCallback((customer: Customer) => {
     setSelectedCustomer(customer)
@@ -52,24 +83,56 @@ export default function Customers() {
     setBalanceOpen(true)
   }, [])
 
-  const handleFreeze = useCallback((customer: Customer) => {
-    toast.success(`${customer.company} 已冻结`)
-  }, [])
-
-  const handleUnfreeze = useCallback((customer: Customer) => {
-    toast.success(`${customer.company} 已解冻`)
-  }, [])
-
-  const handleBalanceSubmit = useCallback(
-    async (data: { amount: number; remark?: string }) => {
-      if (!selectedCustomer) return
-      const action = balanceMode === 'topup' ? '充值' : '扣款'
-      toast.success(`${action} ¥${data.amount.toFixed(2)} 成功`)
+  const handleFreeze = useCallback(
+    async (customer: Customer) => {
+      try {
+        await freezeMutation.mutateAsync({ user_id: customer.id })
+        toast.success(`${customer.company} 已冻结`)
+      } catch (err: any) {
+        toast.error(err?.message || '冻结失败')
+      }
     },
-    [selectedCustomer, balanceMode],
+    [freezeMutation],
   )
 
-  // Show detail view
+  const handleUnfreeze = useCallback(
+    async (customer: Customer) => {
+      try {
+        await unfreezeMutation.mutateAsync({ user_id: customer.id })
+        toast.success(`${customer.company} 已解冻`)
+      } catch (err: any) {
+        toast.error(err?.message || '解冻失败')
+      }
+    },
+    [unfreezeMutation],
+  )
+
+  const handleBalanceSubmit = useCallback(
+    async (formData: { amount: number; remark?: string }) => {
+      if (!selectedCustomer) return
+      try {
+        if (balanceMode === 'topup') {
+          await topUpMutation.mutateAsync({
+            user_id: selectedCustomer.id,
+            amount: formData.amount * 100, // yuan to cents
+          })
+        } else {
+          await deductMutation.mutateAsync({
+            user_id: selectedCustomer.id,
+            amount: formData.amount * 100,
+            reason: formData.remark || '管理员扣款',
+          })
+        }
+        const action = balanceMode === 'topup' ? '充值' : '扣款'
+        toast.success(`${action} ¥${formData.amount.toFixed(2)} 成功`)
+        setBalanceOpen(false)
+      } catch (err: any) {
+        toast.error(err?.message || '操作失败')
+      }
+    },
+    [selectedCustomer, balanceMode, topUpMutation, deductMutation],
+  )
+
   if (detailId) {
     return (
       <div>
@@ -92,15 +155,15 @@ export default function Customers() {
       </div>
 
       <CustomerTable
-        data={filtered}
-        totalCount={filtered.length}
+        data={customers}
+        totalCount={data?.total || 0}
         pagination={pagination}
         onPaginationChange={setPagination}
         sorting={sorting}
         onSortingChange={setSorting}
         search={search}
         onSearchChange={setSearch}
-        isLoading={false}
+        isLoading={isLoading}
         onViewDetail={setDetailId}
         onTopUp={handleTopUp}
         onDeduct={handleDeduct}

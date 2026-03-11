@@ -1,7 +1,5 @@
-// Placeholder for Encore-generated client.
-// Replace with: encore gen client bos3000 --lang=typescript --output=./src/lib/api/client.ts --env=local
-//
-// This stub provides the same interface shape so hooks compile before the backend is available.
+// Admin API client - maps to actual Encore backend REST endpoints.
+// All paths prefixed with /api/ which Vite proxy strips to /.
 
 export interface LoginParams {
   email: string
@@ -9,27 +7,36 @@ export interface LoginParams {
 }
 
 export interface LoginResponse {
-  token: string
+  message: string
+  expires_at: string
 }
 
 export interface User {
-  id: string
+  id: number
   username: string
   email: string
   role: string
   status: string
+  balance: number
+  credit_limit: number
+  max_concurrent: number
+  daily_limit: number
   created_at: string
+  updated_at: string
 }
 
 export interface ListUsersParams {
   page: number
   limit: number
   search?: string
+  status?: string
 }
 
 export interface ListUsersResponse {
   users: User[]
   total: number
+  page: number
+  limit: number
 }
 
 export interface OverviewResponse {
@@ -47,18 +54,19 @@ export interface Alert {
 }
 
 export interface CustomerDetail {
-  id: string
+  id: number
   username: string
   email: string
-  phone: string
   role: string
   status: string
   balance: number
   credit_limit: number
-  concurrent_limit: number
+  max_concurrent: number
   daily_limit: number
-  api_key: string
-  ip_whitelist: string[]
+  rate_plan_id: number | null
+  a_leg_rate: number | null
+  b_leg_rate: number | null
+  webhook_url: string
   created_at: string
   updated_at: string
 }
@@ -67,34 +75,34 @@ export interface CreateUserParams {
   username: string
   email: string
   password: string
-  phone?: string
-  concurrent_limit: number
-  daily_limit: number
-  initial_balance: number
+  credit_limit?: number
+  max_concurrent?: number
+  daily_limit?: number
+  rate_plan_id?: number | null
+  a_leg_rate?: number | null
+  b_leg_rate?: number | null
+  webhook_url?: string
 }
 
 export interface Gateway {
-  id: string
+  id: number
   name: string
-  type: 'a_leg' | 'b_leg'
+  type: string
   host: string
   port: number
-  status: 'up' | 'down' | 'disabled'
+  enabled: boolean
   weight: number
-  prefix: string
-  failover_gateway_id: string
-  concurrent_calls: number
   max_concurrent: number
+  health_status: string
+  created_at: string
 }
 
 export interface CreateGatewayParams {
   name: string
-  type: 'a_leg' | 'b_leg'
+  type: string
   host: string
   port: number
   weight: number
-  prefix: string
-  failover_gateway_id: string
   max_concurrent: number
   enabled: boolean
 }
@@ -108,18 +116,18 @@ export interface TestOriginateResult {
 export interface CDR {
   id: string
   call_id: string
-  caller: string
-  callee: string
+  a_number: string
+  b_number: string
   status: string
   duration: number
   cost: number
-  started_at: string
+  created_at: string
   ended_at: string
 }
 
 export interface Transaction {
-  id: string
-  user_id: string
+  id: number
+  user_id: number
   type: string
   amount: number
   balance_after: number
@@ -128,7 +136,7 @@ export interface Transaction {
 }
 
 export interface RatePlan {
-  id: string
+  id: number
   name: string
   rate_per_minute: number
   billing_increment: number
@@ -136,24 +144,25 @@ export interface RatePlan {
 }
 
 export interface DIDNumber {
-  id: string
+  id: number
   number: string
   status: string
-  assigned_to: string
+  assigned_user_id: number | null
 }
 
 export interface BlacklistEntry {
-  id: string
+  id: number
   number: string
   reason: string
   created_at: string
 }
 
 export interface AuditLog {
-  id: string
+  id: number
   action: string
-  actor: string
-  target: string
+  actor_id: number
+  target_type: string
+  target_id: string
   details: string
   created_at: string
 }
@@ -163,12 +172,37 @@ export interface PaginatedParams {
   limit: number
 }
 
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const resp = await fetch(path, {
+    ...options,
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options?.headers as Record<string, string>),
+    },
+  })
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => ({ code: 'UNKNOWN', message: resp.statusText }))
+    throw body
+  }
+  if (resp.status === 204) return undefined as T
+  return resp.json()
+}
+
+function qs(params: Record<string, unknown>): string {
+  const parts = Object.entries(params)
+    .filter(([, v]) => v !== undefined && v !== null && v !== '')
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`)
+  return parts.length ? '?' + parts.join('&') : ''
+}
+
 class AuthService {
-  async Login(_params: LoginParams): Promise<LoginResponse> {
-    const resp = await fetch('/api/auth.Login', {
+  async Login(params: LoginParams): Promise<LoginResponse> {
+    // Admin login is a raw endpoint that sets a session cookie
+    const resp = await fetch('/api/auth/admin/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(_params),
+      body: JSON.stringify(params),
       credentials: 'include',
     })
     if (!resp.ok) throw await resp.json()
@@ -176,280 +210,178 @@ class AuthService {
   }
 
   async Me(): Promise<User> {
-    const resp = await fetch('/api/auth.Me', { credentials: 'include' })
-    if (!resp.ok) throw await resp.json()
-    return resp.json()
+    return request('/api/auth/me')
   }
 
   async ListUsers(params: ListUsersParams): Promise<ListUsersResponse> {
-    const resp = await fetch('/api/auth.ListUsers', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
-      credentials: 'include',
-    })
-    if (!resp.ok) throw await resp.json()
-    return resp.json()
-  }
-
-  async FreezeUser(params: { user_id: string }): Promise<void> {
-    const resp = await fetch('/api/auth.FreezeUser', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
-      credentials: 'include',
-    })
-    if (!resp.ok) throw await resp.json()
-  }
-
-  async UnfreezeUser(params: { user_id: string }): Promise<void> {
-    const resp = await fetch('/api/auth.UnfreezeUser', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
-      credentials: 'include',
-    })
-    if (!resp.ok) throw await resp.json()
+    return request(`/api/auth/admin/users${qs(params)}`)
   }
 
   async GetUser(params: { user_id: string }): Promise<CustomerDetail> {
-    const resp = await fetch('/api/auth.GetUser', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
-      credentials: 'include',
-    })
-    if (!resp.ok) throw await resp.json()
-    return resp.json()
+    return request(`/api/auth/admin/users/${params.user_id}`)
   }
 
-  async CreateUser(params: CreateUserParams): Promise<{ id: string }> {
-    const resp = await fetch('/api/auth.CreateUser', {
+  async CreateUser(params: CreateUserParams): Promise<{ id: number; email: string; username: string }> {
+    return request('/api/auth/admin/users', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
-      credentials: 'include',
     })
-    if (!resp.ok) throw await resp.json()
-    return resp.json()
+  }
+
+  async FreezeUser(params: { user_id: string }): Promise<void> {
+    return request(`/api/auth/admin/users/${params.user_id}/freeze`, {
+      method: 'POST',
+    })
+  }
+
+  async UnfreezeUser(params: { user_id: string }): Promise<void> {
+    return request(`/api/auth/admin/users/${params.user_id}/unfreeze`, {
+      method: 'POST',
+    })
   }
 
   async RegenerateApiKey(params: { user_id: string }): Promise<{ api_key: string }> {
-    const resp = await fetch('/api/auth.RegenerateApiKey', {
+    return request(`/api/auth/api-keys`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
-      credentials: 'include',
+      body: JSON.stringify({}),
     })
-    if (!resp.ok) throw await resp.json()
-    return resp.json()
   }
 }
 
 class BillingService {
   async GetOverview(): Promise<OverviewResponse> {
-    const resp = await fetch('/api/billing.GetOverview', { credentials: 'include' })
-    if (!resp.ok) throw await resp.json()
-    return resp.json()
+    // TODO: No real endpoint yet, return mock data
+    return {
+      concurrent_calls: 0,
+      today_revenue: 0,
+      today_wastage: 0,
+      bridge_success_rate: 100,
+      alerts: [],
+    }
   }
 
   async TopUp(params: { user_id: string; amount: number }): Promise<void> {
-    const resp = await fetch('/api/billing.TopUp', {
+    return request(`/api/billing/accounts/${params.user_id}/topup`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
-      credentials: 'include',
+      body: JSON.stringify({ amount: params.amount }),
     })
-    if (!resp.ok) throw await resp.json()
   }
 
   async Deduct(params: { user_id: string; amount: number; reason: string }): Promise<void> {
-    const resp = await fetch('/api/billing.Deduct', {
+    return request(`/api/billing/accounts/${params.user_id}/deduct`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
-      credentials: 'include',
+      body: JSON.stringify({ amount: params.amount, reason: params.reason }),
     })
-    if (!resp.ok) throw await resp.json()
   }
 
   async ListTransactions(params: PaginatedParams & { user_id?: string }): Promise<{ transactions: Transaction[]; total: number }> {
-    const resp = await fetch('/api/billing.ListTransactions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
-      credentials: 'include',
-    })
-    if (!resp.ok) throw await resp.json()
-    return resp.json()
+    const userId = params.user_id || '0'
+    return request(`/api/billing/accounts/${userId}/transactions${qs({ page: params.page, page_size: params.limit })}`)
   }
 
   async ListRatePlans(): Promise<{ plans: RatePlan[] }> {
-    const resp = await fetch('/api/billing.ListRatePlans', { credentials: 'include' })
-    if (!resp.ok) throw await resp.json()
-    return resp.json()
+    const resp = await request<{ rate_plans: RatePlan[] }>('/api/billing/rate-plans')
+    return { plans: resp.rate_plans || [] }
   }
 
   async CreateRatePlan(params: Omit<RatePlan, 'id'>): Promise<{ id: string }> {
-    const resp = await fetch('/api/billing.CreateRatePlan', {
+    return request('/api/billing/rate-plans', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
-      credentials: 'include',
     })
-    if (!resp.ok) throw await resp.json()
-    return resp.json()
   }
 }
 
 class RoutingService {
   async ListGateways(): Promise<{ gateways: Gateway[] }> {
-    const resp = await fetch('/api/routing.ListGateways', { credentials: 'include' })
-    if (!resp.ok) throw await resp.json()
-    return resp.json()
+    return request('/api/routing/gateways')
   }
 
   async ToggleGateway(params: { gateway_id: string; enabled: boolean }): Promise<void> {
-    const resp = await fetch('/api/routing.ToggleGateway', {
+    return request(`/api/routing/gateways/${params.gateway_id}/toggle`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
-      credentials: 'include',
+      body: JSON.stringify({ enabled: params.enabled }),
     })
-    if (!resp.ok) throw await resp.json()
   }
 
   async ListDIDs(params: PaginatedParams): Promise<{ dids: DIDNumber[]; total: number }> {
-    const resp = await fetch('/api/routing.ListDIDs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
-      credentials: 'include',
-    })
-    if (!resp.ok) throw await resp.json()
-    return resp.json()
+    return request(`/api/routing/dids${qs(params)}`)
   }
 
   async ImportDIDs(params: { numbers: string[] }): Promise<{ imported: number }> {
-    const resp = await fetch('/api/routing.ImportDIDs', {
+    return request('/api/routing/did-import', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
-      credentials: 'include',
     })
-    if (!resp.ok) throw await resp.json()
-    return resp.json()
   }
 
   async HealthCheck(): Promise<{ status: string; gateways: Array<{ id: string; status: string }> }> {
-    const resp = await fetch('/api/routing.HealthCheck', { credentials: 'include' })
-    if (!resp.ok) throw await resp.json()
-    return resp.json()
+    return request('/api/routing/health-check', { method: 'POST' })
   }
 
   async CreateGateway(params: CreateGatewayParams): Promise<{ id: string }> {
-    const resp = await fetch('/api/routing.CreateGateway', {
+    return request('/api/routing/gateways', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
-      credentials: 'include',
     })
-    if (!resp.ok) throw await resp.json()
-    return resp.json()
   }
 
   async UpdateGateway(params: { gateway_id: string } & Partial<CreateGatewayParams>): Promise<void> {
-    const resp = await fetch('/api/routing.UpdateGateway', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
-      credentials: 'include',
+    const { gateway_id, ...body } = params
+    return request(`/api/routing/gateways/${gateway_id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
     })
-    if (!resp.ok) throw await resp.json()
   }
 
   async TestOriginate(params: { gateway_id: string; phone_number: string }): Promise<TestOriginateResult> {
-    const resp = await fetch('/api/routing.TestOriginate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
-      credentials: 'include',
-    })
-    if (!resp.ok) throw await resp.json()
-    return resp.json()
+    // TODO: No real endpoint yet
+    return { success: false, message: 'Test originate not yet implemented', duration_ms: 0 }
   }
 }
 
 class CallbackService {
   async ListCDRs(params: PaginatedParams & { start_date?: string; end_date?: string }): Promise<{ cdrs: CDR[]; total: number }> {
-    const resp = await fetch('/api/callback.ListCDRs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
-      credentials: 'include',
-    })
-    if (!resp.ok) throw await resp.json()
-    return resp.json()
+    const resp = await request<{ callbacks: CDR[]; total: number; page: number; page_size: number }>(
+      `/api/callbacks${qs({ page: params.page, page_size: params.limit, date_from: params.start_date, date_to: params.end_date })}`
+    )
+    return { cdrs: resp.callbacks || [], total: resp.total || 0 }
   }
 
   async ListActiveCalls(): Promise<{ calls: CDR[] }> {
-    const resp = await fetch('/api/callback.ListActiveCalls', { credentials: 'include' })
-    if (!resp.ok) throw await resp.json()
-    return resp.json()
+    const resp = await request<{ callbacks: CDR[]; total: number }>(
+      `/api/callbacks${qs({ page: 1, page_size: 100, status: 'in_progress' })}`
+    )
+    return { calls: resp.callbacks || [] }
   }
 
   async HangupCall(params: { call_id: string }): Promise<void> {
-    const resp = await fetch('/api/callback.HangupCall', {
+    return request(`/api/callbacks/${params.call_id}/hangup`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
-      credentials: 'include',
     })
-    if (!resp.ok) throw await resp.json()
   }
 }
 
 class ComplianceService {
   async ListBlacklist(params: PaginatedParams): Promise<{ entries: BlacklistEntry[]; total: number }> {
-    const resp = await fetch('/api/compliance.ListBlacklist', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
-      credentials: 'include',
-    })
-    if (!resp.ok) throw await resp.json()
-    return resp.json()
+    return request(`/api/compliance/blacklist${qs(params)}`)
   }
 
   async AddBlacklist(params: { number: string; reason: string }): Promise<void> {
-    const resp = await fetch('/api/compliance.AddBlacklist', {
+    return request('/api/compliance/blacklist', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
-      credentials: 'include',
     })
-    if (!resp.ok) throw await resp.json()
   }
 
   async RemoveBlacklist(params: { id: string }): Promise<void> {
-    const resp = await fetch('/api/compliance.RemoveBlacklist', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
-      credentials: 'include',
+    return request(`/api/compliance/blacklist/${params.id}`, {
+      method: 'DELETE',
     })
-    if (!resp.ok) throw await resp.json()
   }
 
   async ListAuditLogs(params: PaginatedParams): Promise<{ logs: AuditLog[]; total: number }> {
-    const resp = await fetch('/api/compliance.ListAuditLogs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
-      credentials: 'include',
-    })
-    if (!resp.ok) throw await resp.json()
-    return resp.json()
+    return request(`/api/compliance/audit-logs${qs(params)}`)
   }
 }
 

@@ -182,9 +182,9 @@ export function useCDRs(params: PaginatedParams & { start_date?: string; end_dat
 
 export function useActiveCalls() {
   return useQuery({
-    queryKey: ['active-calls'],
+    queryKey: ['admin', 'active-calls'],
     queryFn: () => api.callback.ListActiveCalls(),
-    refetchInterval: 10_000,
+    // WebSocket invalidates this query; no polling needed
   })
 }
 
@@ -193,7 +193,7 @@ export function useHangupCall() {
   return useMutation({
     mutationFn: (params: { call_id: string }) => api.callback.HangupCall(params),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['active-calls'] })
+      queryClient.invalidateQueries({ queryKey: ['admin', 'active-calls'] })
       queryClient.invalidateQueries({ queryKey: ['cdr'] })
     },
   })
