@@ -53,6 +53,11 @@ type InitiateCallbackResponse struct {
 //
 //encore:api auth method=POST path=/callbacks
 func (s *Service) InitiateCallback(ctx context.Context, p *InitiateCallbackParams) (*InitiateCallbackResponse, error) {
+	// Validate explicitly so direct calls (e.g. tests) also run validation.
+	if err := p.Validate(); err != nil {
+		return nil, err
+	}
+
 	ad := getAuthData(ctx)
 	if ad == nil {
 		return nil, &errs.Error{Code: errs.Unauthenticated, Message: "not authenticated"}

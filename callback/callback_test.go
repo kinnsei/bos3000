@@ -128,7 +128,7 @@ func TestFullCallbackFlow(t *testing.T) {
 		ALegResult:     "answer",
 		BLegResult:     "answer",
 		BridgeResult:   "stable",
-		BridgeDuration: 30 * time.Second,
+		BridgeDuration: 500 * time.Millisecond,
 	})
 
 	ctx := withAuth(context.Background(), 1, "client")
@@ -219,7 +219,6 @@ func TestAConnectedBFailed(t *testing.T) {
 }
 
 func TestInitiateValidation_MissingANumber(t *testing.T) {
-	setupMocks(t)
 	svc := &Service{}
 	ctx := withAuth(context.Background(), 1, "client")
 
@@ -232,7 +231,6 @@ func TestInitiateValidation_MissingANumber(t *testing.T) {
 }
 
 func TestInitiateValidation_CustomDataTooLarge(t *testing.T) {
-	setupMocks(t)
 	svc := &Service{}
 	ctx := withAuth(context.Background(), 1, "client")
 
@@ -248,5 +246,221 @@ func TestInitiateValidation_CustomDataTooLarge(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected validation error for large custom_data")
+	}
+}
+
+func TestForceHangup_ActiveCall(t *testing.T) {
+	setupMocks(t)
+	svc := &Service{}
+	setMockFSClient(t, svc, fsclient.MockConfig{
+		ALegResult:     "answer",
+		BLegResult:     "answer",
+		BridgeResult:   "stable",
+		BridgeDuration: 10 * time.Second, // long enough to hangup mid-call
+	})
+
+	ctx := withAuth(context.Background(), 1, "client")
+	resp, err := svc.InitiateCallback(ctx, &InitiateCallbackParams{
+		ANumber: "13800138001",
+		BNumber: "13900139001",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for bridge to establish
+	time.Sleep(500 * time.Millisecond)
+
+	hangupResp, err := svc.ForceHangup(ctx, resp.CallID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hangupResp.Status != "finished" {
+		t.Errorf("expected finished, got %s", hangupResp.Status)
+	}
+
+	// Verify call reaches terminal state
+	status := pollCallStatus(t, svc, ctx, resp.CallID, 20)
+	if status.Status != "finished" && status.Status != "failed" {
+		t.Errorf("expected terminal status, got %s", status.Status)
+	}
+}
+
+func TestForceHangup_PermissionDenied(t *testing.T) {
+	setupMocks(t)
+	svc := &Service{}
+	setMockFSClient(t, svc, fsclient.MockConfig{
+		ALegResult:     "answer",
+		BLegResult:     "answer",
+		BridgeResult:   "stable",
+		BridgeDuration: 10 * time.Second,
+	})
+
+	ctx1 := withAuth(context.Background(), 1, "client")
+	resp, err := svc.InitiateCallback(ctx1, &InitiateCallbackParams{
+		ANumber: "13800138001",
+		BNumber: "13900139001",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(500 * time.Millisecond)
+
+	// Different user tries to hangup
+	ctx2 := withAuth(context.Background(), 999, "client")
+	_, err = svc.ForceHangup(ctx2, resp.CallID)
+	if err == nil {
+		t.Fatal("expected permission denied")
+	}
+
+	// Admin should succeed
+	ctxAdmin := withAuth(context.Background(), 999, "admin")
+	hangupResp, err := svc.ForceHangup(ctxAdmin, resp.CallID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hangupResp.Status != "finished" {
+		t.Errorf("expected finished, got %s", hangupResp.Status)
+	}
+}
+
+func TestForceHangup_NotFound(t *testing.T) {
+	svc := &Service{}
+	ctx := withAuth(context.Background(), 1, "client")
+
+	_, err := svc.ForceHangup(ctx, "nonexistent-call-id")
+	if err == nil {
+		t.Fatal("expected not found error")
+	}
+}
+
+func TestListCallbacks_Basic(t *testing.T) {
+	setupMocks(t)
+	svc := &Service{}
+	setMockFSClient(t, svc, fsclient.MockConfig{
+		ALegResult:     "answer",
+		BLegResult:     "answer",
+		BridgeResult:   "stable",
+		BridgeDuration: 200 * time.Millisecond,
+	})
+
+	ctx := withAuth(context.Background(), 1, "client")
+
+	// Create two calls
+	for i := 0; i < 2; i++ {
+		_, err := svc.InitiateCallback(ctx, &InitiateCallbackParams{
+			ANumber: "13800138001",
+			BNumber: "13900139001",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Wait for calls to finish
+	time.Sleep(1 * time.Second)
+
+	listResp, err := svc.ListCallbacks(ctx, &ListCallbacksParams{
+		Page:     1,
+		PageSize: 10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if listResp.Total < 2 {
+		t.Errorf("expected at least 2 callbacks, got %d", listResp.Total)
+	}
+	if len(listResp.Items) < 2 {
+		t.Errorf("expected at least 2 items, got %d", len(listResp.Items))
+	}
+}
+
+func TestListCallbacks_ClientIsolation(t *testing.T) {
+	setupMocks(t)
+	svc := &Service{}
+	setMockFSClient(t, svc, fsclient.MockConfig{
+		ALegResult:     "answer",
+		BLegResult:     "answer",
+		BridgeResult:   "stable",
+		BridgeDuration: 200 * time.Millisecond,
+	})
+
+	// User 1 creates a call
+	ctx1 := withAuth(context.Background(), 1, "client")
+	_, err := svc.InitiateCallback(ctx1, &InitiateCallbackParams{
+		ANumber: "13800138001",
+		BNumber: "13900139001",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// User 2 creates a call
+	ctx2 := withAuth(context.Background(), 2, "client")
+	_, err = svc.InitiateCallback(ctx2, &InitiateCallbackParams{
+		ANumber: "13800138002",
+		BNumber: "13900139002",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(1 * time.Second)
+
+	// User 2 should only see their own calls
+	listResp, err := svc.ListCallbacks(ctx2, &ListCallbacksParams{Page: 1, PageSize: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range listResp.Items {
+		if item.UserID != 2 {
+			t.Errorf("user 2 saw call belonging to user %d", item.UserID)
+		}
+	}
+
+	// Admin sees all
+	ctxAdmin := withAuth(context.Background(), 999, "admin")
+	adminResp, err := svc.ListCallbacks(ctxAdmin, &ListCallbacksParams{Page: 1, PageSize: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if adminResp.Total < 2 {
+		t.Errorf("admin expected at least 2 total, got %d", adminResp.Total)
+	}
+}
+
+func TestListCallbacks_StatusFilter(t *testing.T) {
+	setupMocks(t)
+	svc := &Service{}
+	setMockFSClient(t, svc, fsclient.MockConfig{
+		ALegResult:     "answer",
+		BLegResult:     "answer",
+		BridgeResult:   "stable",
+		BridgeDuration: 200 * time.Millisecond,
+	})
+
+	ctx := withAuth(context.Background(), 1, "client")
+	_, err := svc.InitiateCallback(ctx, &InitiateCallbackParams{
+		ANumber: "13800138001",
+		BNumber: "13900139001",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(1 * time.Second)
+
+	// Filter by finished status
+	listResp, err := svc.ListCallbacks(ctx, &ListCallbacksParams{
+		Status:   "finished",
+		Page:     1,
+		PageSize: 10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range listResp.Items {
+		if item.Status != "finished" {
+			t.Errorf("expected finished status, got %s", item.Status)
+		}
 	}
 }

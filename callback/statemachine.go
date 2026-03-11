@@ -2,15 +2,22 @@ package callback
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"time"
 
 	"encore.dev/rlog"
+	"encore.dev/storage/sqldb"
 
 	"encore.app/billing"
 	"encore.app/callback/fsclient"
 	"encore.app/pkg/types"
+	"encore.app/recording"
+	"encore.app/webhook"
 )
+
+// authDB references the auth service's database for webhook lookups.
+var authDB = sqldb.Named("auth")
 
 // runCall drives the full call lifecycle as a goroutine.
 func (s *Service) runCall(ctx context.Context, call *CallbackCall) {
@@ -20,6 +27,9 @@ func (s *Service) runCall(ctx context.Context, call *CallbackCall) {
 		return
 	}
 	ac := v.(*activeCall)
+
+	// Publish webhook for initiating status
+	s.publishWebhook(ctx, call)
 
 	// Read park timeout from config
 	parkTimeoutSec := 60
@@ -41,9 +51,9 @@ func (s *Service) runCall(ctx context.Context, call *CallbackCall) {
 
 	// 1. A-leg originate
 	aUUID, err := s.fsClient.OriginateALeg(ctx, fsclient.OriginateParams{
-		CallID:   call.CallID,
-		Number:   call.ANumber,
-		CallerID: ptrOr(call.CallerID, ""),
+		CallID:    call.CallID,
+		Number:    call.ANumber,
+		CallerID:  ptrOr(call.CallerID, ""),
 		GatewayIP: ptrOr(call.AGatewayName, ""),
 	})
 	if err != nil {
@@ -58,6 +68,7 @@ func (s *Service) runCall(ctx context.Context, call *CallbackCall) {
 	call.ADialAt = &now
 	call.Status = "a_dialing"
 	_ = updateCallStatus(ctx, call.CallID, "a_dialing")
+	s.publishWebhook(ctx, call)
 
 	// 2. Wait for A-leg event
 	parkTimer := time.NewTimer(time.Duration(parkTimeoutSec) * time.Second)
@@ -70,6 +81,7 @@ func (s *Service) runCall(ctx context.Context, call *CallbackCall) {
 			call.AAnswerAt = &answerAt
 			call.Status = "a_connected"
 			_ = updateCallStatus(ctx, call.CallID, "a_connected")
+			s.publishWebhook(ctx, call)
 		} else if event.EventName == "CHANNEL_HANGUP" {
 			hangupAt := event.Timestamp
 			call.AHangupAt = &hangupAt
@@ -95,9 +107,9 @@ func (s *Service) runCall(ctx context.Context, call *CallbackCall) {
 
 	// 3. A-leg answered -> originate B-leg
 	bUUID, err := s.fsClient.OriginateBLegAndBridge(ctx, aUUID, fsclient.OriginateParams{
-		CallID:   call.CallID,
-		Number:   call.BNumber,
-		CallerID: ptrOr(call.CallerID, ""),
+		CallID:    call.CallID,
+		Number:    call.BNumber,
+		CallerID:  ptrOr(call.CallerID, ""),
 		GatewayIP: ptrOr(call.BGatewayName, ""),
 	})
 	if err != nil {
@@ -116,6 +128,7 @@ func (s *Service) runCall(ctx context.Context, call *CallbackCall) {
 	call.BDialAt = &bDialAt
 	call.Status = "b_dialing"
 	_ = updateCallStatus(ctx, call.CallID, "b_dialing")
+	s.publishWebhook(ctx, call)
 
 	// 4. Wait for B-leg events (answer, bridge, hangup) with max duration guard
 	bridged := false
@@ -131,6 +144,7 @@ func (s *Service) runCall(ctx context.Context, call *CallbackCall) {
 				call.BAnswerAt = &bAnswerAt
 				call.Status = "b_connected"
 				_ = updateCallStatus(ctx, call.CallID, "b_connected")
+				s.publishWebhook(ctx, call)
 
 			case event.EventName == "CHANNEL_BRIDGE":
 				bridgeAt := event.Timestamp
@@ -138,6 +152,11 @@ func (s *Service) runCall(ctx context.Context, call *CallbackCall) {
 				call.Status = "bridged"
 				_ = updateCallStatus(ctx, call.CallID, "bridged")
 				bridged = true
+
+				// Start recording on both legs (best-effort)
+				s.startRecording(ctx, call, aUUID, bUUID)
+
+				s.publishWebhook(ctx, call)
 
 			case event.EventName == "CHANNEL_HANGUP":
 				hangupAt := event.Timestamp
@@ -150,6 +169,8 @@ func (s *Service) runCall(ctx context.Context, call *CallbackCall) {
 				}
 				if bridged {
 					call.BridgeEndAt = &hangupAt
+					// Stop recording before finalization
+					s.stopRecording(ctx, call, aUUID, bUUID)
 					s.finalizeCall(ctx, call, "finished")
 					return
 				}
@@ -166,6 +187,9 @@ func (s *Service) runCall(ctx context.Context, call *CallbackCall) {
 			_ = s.fsClient.HangupCall(ctx, bUUID, "ALLOTTED_TIMEOUT")
 			hangupBy := "system"
 			call.HangupBy = &hangupBy
+			if bridged {
+				s.stopRecording(ctx, call, aUUID, bUUID)
+			}
 			s.finalizeCall(ctx, call, "finished")
 			return
 
@@ -174,14 +198,138 @@ func (s *Service) runCall(ctx context.Context, call *CallbackCall) {
 			_ = s.fsClient.HangupCall(ctx, bUUID, "NORMAL_CLEARING")
 			reason := "force_hangup"
 			call.FailureReason = &reason
+			if bridged {
+				s.stopRecording(ctx, call, aUUID, bUUID)
+			}
 			s.finalizeCall(ctx, call, "failed")
 			return
 		}
 	}
 }
 
+// startRecording initiates recording on both call legs. Errors are logged but non-blocking.
+func (s *Service) startRecording(ctx context.Context, call *CallbackCall, aUUID, bUUID string) {
+	if err := s.fsClient.StartRecording(ctx, aUUID, call.CallID, "a"); err != nil {
+		rlog.Error("start recording A-leg failed", "call_id", call.CallID, "error", err)
+	}
+	if err := s.fsClient.StartRecording(ctx, bUUID, call.CallID, "b"); err != nil {
+		rlog.Error("start recording B-leg failed", "call_id", call.CallID, "error", err)
+	}
+	recStatus := recording.StatusRecording
+	call.RecordingStatus = &recStatus
+	_, _ = db.Exec(ctx, `UPDATE callback_calls SET recording_status = $1 WHERE call_id = $2`,
+		recStatus, call.CallID)
+}
+
+// stopRecording stops recording on both call legs. Errors are logged but non-blocking.
+func (s *Service) stopRecording(ctx context.Context, call *CallbackCall, aUUID, bUUID string) {
+	if err := s.fsClient.StopRecording(ctx, aUUID, call.CallID, "a"); err != nil {
+		rlog.Error("stop recording A-leg failed", "call_id", call.CallID, "error", err)
+	}
+	if err := s.fsClient.StopRecording(ctx, bUUID, call.CallID, "b"); err != nil {
+		rlog.Error("stop recording B-leg failed", "call_id", call.CallID, "error", err)
+	}
+}
+
+// publishWebhook looks up the user's webhook config and publishes a webhook event.
+// Errors are logged but non-blocking.
+func (s *Service) publishWebhook(ctx context.Context, call *CallbackCall) {
+	var webhookURL, webhookSecret *string
+	err := authDB.QueryRow(ctx,
+		`SELECT webhook_url, COALESCE(webhook_secret, '') FROM users WHERE id = $1`,
+		call.UserID,
+	).Scan(&webhookURL, &webhookSecret)
+	if err != nil || webhookURL == nil || *webhookURL == "" {
+		return
+	}
+
+	payload := buildWebhookPayload(call)
+	secret := ""
+	if webhookSecret != nil {
+		secret = *webhookSecret
+	}
+	if err := webhook.CreateAndPublishWebhook(ctx, call.CallID, call.UserID, *webhookURL, secret, payload); err != nil {
+		rlog.Error("webhook publish failed", "call_id", call.CallID, "status", call.Status, "error", err)
+	}
+}
+
+// buildWebhookPayload constructs a WebhookPayload from the current call state.
+func buildWebhookPayload(call *CallbackCall) *webhook.WebhookPayload {
+	payload := &webhook.WebhookPayload{
+		EventType:  "call." + call.Status,
+		CallID:     call.CallID,
+		Status:     call.Status,
+		CustomData: call.CustomData,
+		Timestamp:  time.Now(),
+		ALeg: &webhook.LegDetail{
+			Number:   call.ANumber,
+			Status:   aLegStatus(call),
+			DialAt:   call.ADialAt,
+			AnswerAt: call.AAnswerAt,
+			HangupAt: call.AHangupAt,
+		},
+	}
+
+	if call.AHangupCause != nil {
+		payload.ALeg.HangupCause = *call.AHangupCause
+	}
+
+	if call.BDialAt != nil {
+		bLeg := &webhook.LegDetail{
+			Number:   call.BNumber,
+			Status:   bLegStatus(call),
+			DialAt:   call.BDialAt,
+			AnswerAt: call.BAnswerAt,
+			HangupAt: call.BHangupAt,
+		}
+		if call.BHangupCause != nil {
+			bLeg.HangupCause = *call.BHangupCause
+		}
+		payload.BLeg = bLeg
+	}
+
+	if call.BridgeAt != nil {
+		bridgeDur := 0
+		if call.BridgeDurationMs > 0 {
+			bridgeDur = int(call.BridgeDurationMs / 1000)
+		}
+		payload.Bridge = &webhook.BridgeDetail{
+			BridgedAt: call.BridgeAt,
+			Duration:  bridgeDur,
+		}
+	}
+
+	return payload
+}
+
+func aLegStatus(call *CallbackCall) string {
+	if call.AHangupAt != nil {
+		return "hangup"
+	}
+	if call.AAnswerAt != nil {
+		return "answered"
+	}
+	if call.ADialAt != nil {
+		return "dialing"
+	}
+	return "pending"
+}
+
+func bLegStatus(call *CallbackCall) string {
+	if call.BHangupAt != nil {
+		return "hangup"
+	}
+	if call.BAnswerAt != nil {
+		return "answered"
+	}
+	if call.BDialAt != nil {
+		return "dialing"
+	}
+	return "pending"
+}
+
 // finalizeCall calculates costs, classifies wastage, and persists final state.
-func (s *Service) finalizeCall(ctx context.Context, call *CallbackCall, status string) {
+func (s *Service) finalizeCall(_ context.Context, call *CallbackCall, status string) {
 	v, ok := s.activeCalls.Load(call.CallID)
 	if !ok {
 		return
@@ -189,6 +337,8 @@ func (s *Service) finalizeCall(ctx context.Context, call *CallbackCall, status s
 	ac := v.(*activeCall)
 
 	ac.finalized.Do(func() {
+		// Use background context for finalization since callCtx may be cancelled.
+		bgCtx := context.Background()
 		now := time.Now()
 
 		// Calculate A-leg duration
@@ -229,7 +379,7 @@ func (s *Service) finalizeCall(ctx context.Context, call *CallbackCall, status s
 
 		// Classify wastage
 		thresholdSec := int64(10)
-		if val, err := getSystemConfig(ctx, "bridge_broken_early_threshold_sec"); err == nil {
+		if val, err := getSystemConfig(bgCtx, "bridge_broken_early_threshold_sec"); err == nil {
 			if parsed, err := strconv.ParseInt(val, 10, 64); err == nil {
 				thresholdSec = parsed
 			}
@@ -251,7 +401,7 @@ func (s *Service) finalizeCall(ctx context.Context, call *CallbackCall, status s
 		// Finalize billing
 		aLegDurSec := call.ADurationMs / 1000
 		bLegDurSec := call.BDurationMs / 1000
-		finalResp, err := billing.Finalize(ctx, &billing.FinalizeParams{
+		finalResp, err := billing.Finalize(bgCtx, &billing.FinalizeParams{
 			UserID:          call.UserID,
 			CallID:          call.CallID,
 			ALegDurationSec: aLegDurSec,
@@ -269,17 +419,38 @@ func (s *Service) finalizeCall(ctx context.Context, call *CallbackCall, status s
 		}
 
 		// Release concurrent slot
-		_, err = billing.ReleaseSlot(ctx, &billing.ReleaseSlotParams{
+		_, err = billing.ReleaseSlot(bgCtx, &billing.ReleaseSlotParams{
 			UserID: call.UserID,
 		})
 		if err != nil {
 			rlog.Error("billing release slot failed", "call_id", call.CallID, "error", err)
 		}
 
+		// Publish recording merge for bridged calls with active recording
+		if call.BridgeAt != nil && call.RecordingStatus != nil && *call.RecordingStatus == recording.StatusRecording {
+			mergingStatus := recording.StatusMerging
+			call.RecordingStatus = &mergingStatus
+			_, pubErr := recording.RecordingMergeTopic.Publish(bgCtx, &recording.RecordingMergeEvent{
+				CallID:     call.CallID,
+				CustomerID: call.UserID,
+				AFilePath:  fmt.Sprintf("/var/lib/freeswitch/recordings/%s_a.wav", call.CallID),
+				BFilePath:  fmt.Sprintf("/var/lib/freeswitch/recordings/%s_b.wav", call.CallID),
+				Date:       time.Now().Format("2006-01-02"),
+			})
+			if pubErr != nil {
+				rlog.Error("recording merge publish failed", "call_id", call.CallID, "error", pubErr)
+				failedStatus := recording.StatusFailed
+				call.RecordingStatus = &failedStatus
+			}
+		}
+
 		// Persist final state
-		if err := updateCallFinal(ctx, call); err != nil {
+		if err := updateCallFinal(bgCtx, call); err != nil {
 			rlog.Error("update call final failed", "call_id", call.CallID, "error", err)
 		}
+
+		// Publish final webhook with complete CDR data
+		s.publishWebhook(bgCtx, call)
 
 		// Remove from active calls
 		s.activeCalls.Delete(call.CallID)

@@ -25,6 +25,13 @@ type mockCallState struct {
 	active bool
 }
 
+// RecordingCall tracks a StartRecording or StopRecording call for test assertions.
+type RecordingCall struct {
+	UUID   string
+	CallID string
+	Leg    string
+}
+
 // MockFSClient implements FSClient for testing with configurable scenarios.
 type MockFSClient struct {
 	config   MockConfig
@@ -32,6 +39,11 @@ type MockFSClient struct {
 	handlers map[string][]func(CallEvent)
 	callsMu  sync.Mutex
 	calls    map[string]*mockCallState
+
+	recMu              sync.Mutex
+	StartRecordingCalls []RecordingCall
+	StopRecordingCalls  []RecordingCall
+	StartRecordingErr   error // if set, StartRecording returns this error
 }
 
 // NewMockFSClient creates a MockFSClient with the given config.
@@ -138,6 +150,11 @@ func (m *MockFSClient) OriginateBLegAndBridge(ctx context.Context, aUUID string,
 
 		runtime.Gosched()
 
+		// Simulate bridge duration if configured
+		if m.config.BridgeDuration > 0 {
+			time.Sleep(m.config.BridgeDuration)
+		}
+
 		// Bridge ends
 		cause := m.config.BLegHangupCause
 		if cause == "" {
@@ -178,11 +195,38 @@ func (m *MockFSClient) HangupCall(ctx context.Context, uuid string, cause string
 }
 
 func (m *MockFSClient) StartRecording(ctx context.Context, uuid string, callID string, leg string) error {
+	m.recMu.Lock()
+	m.StartRecordingCalls = append(m.StartRecordingCalls, RecordingCall{UUID: uuid, CallID: callID, Leg: leg})
+	m.recMu.Unlock()
+	if m.StartRecordingErr != nil {
+		return m.StartRecordingErr
+	}
 	return nil
 }
 
 func (m *MockFSClient) StopRecording(ctx context.Context, uuid string, callID string, leg string) error {
+	m.recMu.Lock()
+	m.StopRecordingCalls = append(m.StopRecordingCalls, RecordingCall{UUID: uuid, CallID: callID, Leg: leg})
+	m.recMu.Unlock()
 	return nil
+}
+
+// GetStartRecordingCalls returns a copy of recorded StartRecording calls (thread-safe).
+func (m *MockFSClient) GetStartRecordingCalls() []RecordingCall {
+	m.recMu.Lock()
+	defer m.recMu.Unlock()
+	result := make([]RecordingCall, len(m.StartRecordingCalls))
+	copy(result, m.StartRecordingCalls)
+	return result
+}
+
+// GetStopRecordingCalls returns a copy of recorded StopRecording calls (thread-safe).
+func (m *MockFSClient) GetStopRecordingCalls() []RecordingCall {
+	m.recMu.Lock()
+	defer m.recMu.Unlock()
+	result := make([]RecordingCall, len(m.StopRecordingCalls))
+	copy(result, m.StopRecordingCalls)
+	return result
 }
 
 func (m *MockFSClient) RegisterEventHandler(eventName string, handler func(CallEvent)) {

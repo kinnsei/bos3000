@@ -58,6 +58,12 @@ type CallbackCall struct {
 	BLegCost        int64 `json:"b_leg_cost"`
 	TotalCost       int64 `json:"total_cost"`
 
+	// Recording
+	RecordingStatus *string `json:"recording_status,omitempty"`
+	RecordingKey    *string `json:"recording_key,omitempty"`
+	RecordingAKey   *string `json:"recording_a_key,omitempty"`
+	RecordingBKey   *string `json:"recording_b_key,omitempty"`
+
 	// Wastage
 	WastageType       *string `json:"wastage_type,omitempty"`
 	WastageCost       *int64  `json:"wastage_cost,omitempty"`

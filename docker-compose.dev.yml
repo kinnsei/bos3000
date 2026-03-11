@@ -1,21 +1,47 @@
 # Start with: docker compose -f docker-compose.dev.yml up -d
+# Start with HA: docker compose -f docker-compose.dev.yml --profile ha up -d
 # Encore app: encore run --listen :12345
 
 services:
-  freeswitch:
-    image: drachtio/drachtio-freeswitch-mrf:latest
+  freeswitch-primary:
+    image: signalwire/freeswitch:1.10
+    container_name: bos3000-fs-primary
     ports:
-      - "5060:5060/udp"   # SIP
-      - "8021:8021/tcp"   # ESL (Event Socket Library)
+      - "8021:8021"
+      - "5080:5080/udp"
+      - "5080:5080/tcp"
+    volumes:
+      - ./docker/freeswitch/conf:/usr/local/freeswitch/etc/freeswitch
+      - fs-recordings:/var/lib/freeswitch/recordings
     environment:
       - ESL_PASSWORD=ClueCon
-      - SIP_PORT=5060
-    # Volume mount for custom FreeSWITCH config (uncomment to use):
-    # volumes:
-    #   - ./docker/freeswitch/conf:/etc/freeswitch
     healthcheck:
       test: ["CMD", "nc", "-z", "localhost", "8021"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 15s
+    networks:
+      - bos3000
+
+  freeswitch-standby:
+    image: signalwire/freeswitch:1.10
+    container_name: bos3000-fs-standby
+    ports:
+      - "8022:8021"
+      - "5081:5080/udp"
+    volumes:
+      - ./docker/freeswitch/conf:/usr/local/freeswitch/etc/freeswitch
+      - fs-recordings:/var/lib/freeswitch/recordings
+    environment:
+      - ESL_PASSWORD=ClueCon
+    profiles:
+      - ha
+    networks:
+      - bos3000
+
+volumes:
+  fs-recordings:
+
+networks:
+  bos3000:

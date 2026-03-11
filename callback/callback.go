@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"encore.dev/config"
 	"encore.dev/rlog"
 	"encore.dev/storage/sqldb"
 
@@ -16,28 +17,86 @@ var db = sqldb.NewDatabase("callback", sqldb.DatabaseConfig{
 	Migrations: "./migrations",
 })
 
+// CallbackConfig holds FreeSWITCH connection configuration.
+type CallbackConfig struct {
+	FSMode            config.String // "mock" or "real"
+	FSPrimaryAddress  config.String
+	FSPrimaryPassword config.String
+	FSStandbyAddress  config.String
+	FSStandbyPassword config.String
+}
+
+var cfg = config.Load[*CallbackConfig]()
+
 //encore:service
 type Service struct {
 	fsClient    fsclient.FSClient
+	fsManager   *fsclient.FSClientManager
 	activeCalls sync.Map // map[string]*activeCall
 }
 
 func initService() (*Service, error) {
-	mockClient := fsclient.NewMockFSClient(fsclient.MockConfig{
-		ALegResult:     "answer",
-		BLegResult:     "answer",
-		BridgeResult:   "stable",
-		BridgeDuration: 30 * time.Second,
-	})
+	svc := &Service{}
 
-	svc := &Service{
-		fsClient: mockClient,
+	fsMode := cfg.FSMode()
+	if fsMode == "real" {
+		primaryAddr := cfg.FSPrimaryAddress()
+		primaryPwd := cfg.FSPrimaryPassword()
+		standbyAddr := cfg.FSStandbyAddress()
+		standbyPwd := cfg.FSStandbyPassword()
+
+		manager := fsclient.NewFSClientManager(primaryAddr, primaryPwd, standbyAddr, standbyPwd, func(failedIdx int) {
+			rlog.Error("FreeSWITCH failover triggered", "failed_idx", failedIdx)
+			// Finalize all in-flight calls on the failed instance
+			svc.activeCalls.Range(func(key, value any) bool {
+				ac := value.(*activeCall)
+				reason := "fs_connection_lost"
+				ac.call.FailureReason = &reason
+				svc.finalizeCall(context.Background(), ac.call, "failed")
+				return true
+			})
+		})
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := manager.Connect(ctx); err != nil {
+			return nil, fmt.Errorf("fsclient manager connect: %w", err)
+		}
+
+		svc.fsManager = manager
+
+		// Pick initial client for event handler registration
+		client, err := manager.Pick()
+		if err != nil {
+			return nil, fmt.Errorf("fsclient manager pick: %w", err)
+		}
+		svc.fsClient = client
+
+		// Register event handlers on all managed instances
+		svc.registerEventHandlers(client)
+
+		rlog.Info("running in real FSClient mode",
+			"primary", primaryAddr, "standby", standbyAddr)
+	} else {
+		mockClient := fsclient.NewMockFSClient(fsclient.MockConfig{
+			ALegResult:     "answer",
+			BLegResult:     "answer",
+			BridgeResult:   "stable",
+			BridgeDuration: 30 * time.Second,
+		})
+		svc.fsClient = mockClient
+		svc.registerEventHandlers(mockClient)
+		rlog.Info("running in mock FSClient mode")
 	}
 
-	// Register event handler that routes events to the correct call's eventCh
+	return svc, nil
+}
+
+// registerEventHandlers sets up event routing from FSClient to active call channels.
+func (s *Service) registerEventHandlers(client fsclient.FSClient) {
 	for _, eventName := range []string{"CHANNEL_ANSWER", "CHANNEL_BRIDGE", "CHANNEL_HANGUP"} {
-		mockClient.RegisterEventHandler(eventName, func(event fsclient.CallEvent) {
-			if v, ok := svc.activeCalls.Load(event.CallID); ok {
+		client.RegisterEventHandler(eventName, func(event fsclient.CallEvent) {
+			if v, ok := s.activeCalls.Load(event.CallID); ok {
 				ac := v.(*activeCall)
 				select {
 				case ac.eventCh <- event:
@@ -45,11 +104,32 @@ func initService() (*Service, error) {
 					rlog.Warn("event channel full, dropping event",
 						"call_id", event.CallID, "event", event.EventName)
 				}
+			} else {
+				rlog.Warn("orphan event, call not in active map",
+					"call_id", event.CallID, "event", event.EventName, "uuid", event.UUID)
 			}
 		})
 	}
+}
 
-	return svc, nil
+// Shutdown gracefully terminates the callback service.
+func (s *Service) Shutdown(force context.Context) {
+	rlog.Info("callback service shutting down, finalizing in-flight calls")
+
+	// Finalize all remaining active calls
+	s.activeCalls.Range(func(key, value any) bool {
+		ac := value.(*activeCall)
+		reason := "service_shutdown"
+		ac.call.FailureReason = &reason
+		ac.cancel()
+		return true
+	})
+
+	// Wait briefly for goroutines to finish
+	select {
+	case <-time.After(5 * time.Second):
+	case <-force.Done():
+	}
 }
 
 // --- DB helpers ---
@@ -90,8 +170,9 @@ func updateCallFinal(ctx context.Context, call *CallbackCall) error {
 			a_leg_cost = $17, b_leg_cost = $18, total_cost = $19,
 			wastage_type = $20, wastage_cost = $21, wastage_duration_ms = $22,
 			hangup_by = $23, failure_reason = $24,
+			recording_status = $25,
 			updated_at = NOW()
-		WHERE call_id = $25
+		WHERE call_id = $26
 	`, call.Status,
 		call.AfsUUID, call.ADialAt, call.AAnswerAt, call.AHangupAt,
 		call.AHangupCause, call.ADurationMs,
@@ -101,6 +182,7 @@ func updateCallFinal(ctx context.Context, call *CallbackCall) error {
 		call.ALegCost, call.BLegCost, call.TotalCost,
 		call.WastageType, call.WastageCost, call.WastageDurationMs,
 		call.HangupBy, call.FailureReason,
+		call.RecordingStatus,
 		call.CallID,
 	)
 	return err
@@ -117,6 +199,7 @@ func getCall(ctx context.Context, callID string) (*CallbackCall, error) {
 			b_hangup_cause, b_duration_ms,
 			bridge_at, bridge_end_at, bridge_duration_ms,
 			a_leg_rate, b_leg_rate, pre_deduct_amount, a_leg_cost, b_leg_cost, total_cost,
+			recording_status, recording_key, recording_a_key, recording_b_key,
 			wastage_type, wastage_cost, wastage_duration_ms,
 			hangup_by, failure_reason,
 			created_at, updated_at
@@ -133,6 +216,7 @@ func getCall(ctx context.Context, callID string) (*CallbackCall, error) {
 		&call.BridgeAt, &call.BridgeEndAt, &call.BridgeDurationMs,
 		&call.ALegRate, &call.BLegRate, &call.PreDeductAmount,
 		&call.ALegCost, &call.BLegCost, &call.TotalCost,
+		&call.RecordingStatus, &call.RecordingKey, &call.RecordingAKey, &call.RecordingBKey,
 		&call.WastageType, &call.WastageCost, &call.WastageDurationMs,
 		&call.HangupBy, &call.FailureReason,
 		&call.CreatedAt, &call.UpdatedAt,
