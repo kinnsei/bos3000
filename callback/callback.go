@@ -33,10 +33,16 @@ type Service struct {
 	fsClient    fsclient.FSClient
 	fsManager   *fsclient.FSClientManager
 	activeCalls sync.Map // map[string]*activeCall
+	hub         *Hub
 }
 
 func initService() (*Service, error) {
-	svc := &Service{}
+	hub := NewHub()
+	go hub.Run()
+
+	svc := &Service{
+		hub: hub,
+	}
 
 	fsMode := cfg.FSMode()
 	if fsMode == "real" {
