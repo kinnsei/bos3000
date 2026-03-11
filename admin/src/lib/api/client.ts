@@ -46,6 +46,33 @@ export interface Alert {
   severity: 'warning' | 'critical'
 }
 
+export interface CustomerDetail {
+  id: string
+  username: string
+  email: string
+  phone: string
+  role: string
+  status: string
+  balance: number
+  credit_limit: number
+  concurrent_limit: number
+  daily_limit: number
+  api_key: string
+  ip_whitelist: string[]
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateUserParams {
+  username: string
+  email: string
+  password: string
+  phone?: string
+  concurrent_limit: number
+  daily_limit: number
+  initial_balance: number
+}
+
 export interface Gateway {
   id: string
   name: string
@@ -54,8 +81,28 @@ export interface Gateway {
   port: number
   status: 'up' | 'down' | 'disabled'
   weight: number
+  prefix: string
+  failover_gateway_id: string
   concurrent_calls: number
   max_concurrent: number
+}
+
+export interface CreateGatewayParams {
+  name: string
+  type: 'a_leg' | 'b_leg'
+  host: string
+  port: number
+  weight: number
+  prefix: string
+  failover_gateway_id: string
+  max_concurrent: number
+  enabled: boolean
+}
+
+export interface TestOriginateResult {
+  success: boolean
+  message: string
+  duration_ms: number
 }
 
 export interface CDR {
@@ -164,6 +211,39 @@ class AuthService {
     })
     if (!resp.ok) throw await resp.json()
   }
+
+  async GetUser(params: { user_id: string }): Promise<CustomerDetail> {
+    const resp = await fetch('/api/auth.GetUser', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+      credentials: 'include',
+    })
+    if (!resp.ok) throw await resp.json()
+    return resp.json()
+  }
+
+  async CreateUser(params: CreateUserParams): Promise<{ id: string }> {
+    const resp = await fetch('/api/auth.CreateUser', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+      credentials: 'include',
+    })
+    if (!resp.ok) throw await resp.json()
+    return resp.json()
+  }
+
+  async RegenerateApiKey(params: { user_id: string }): Promise<{ api_key: string }> {
+    const resp = await fetch('/api/auth.RegenerateApiKey', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+      credentials: 'include',
+    })
+    if (!resp.ok) throw await resp.json()
+    return resp.json()
+  }
 }
 
 class BillingService {
@@ -263,6 +343,38 @@ class RoutingService {
 
   async HealthCheck(): Promise<{ status: string; gateways: Array<{ id: string; status: string }> }> {
     const resp = await fetch('/api/routing.HealthCheck', { credentials: 'include' })
+    if (!resp.ok) throw await resp.json()
+    return resp.json()
+  }
+
+  async CreateGateway(params: CreateGatewayParams): Promise<{ id: string }> {
+    const resp = await fetch('/api/routing.CreateGateway', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+      credentials: 'include',
+    })
+    if (!resp.ok) throw await resp.json()
+    return resp.json()
+  }
+
+  async UpdateGateway(params: { gateway_id: string } & Partial<CreateGatewayParams>): Promise<void> {
+    const resp = await fetch('/api/routing.UpdateGateway', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+      credentials: 'include',
+    })
+    if (!resp.ok) throw await resp.json()
+  }
+
+  async TestOriginate(params: { gateway_id: string; phone_number: string }): Promise<TestOriginateResult> {
+    const resp = await fetch('/api/routing.TestOriginate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+      credentials: 'include',
+    })
     if (!resp.ok) throw await resp.json()
     return resp.json()
   }

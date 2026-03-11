@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import Client from './client'
-import type { ListUsersParams, PaginatedParams } from './client'
+import type { ListUsersParams, PaginatedParams, CreateUserParams, CreateGatewayParams } from './client'
 
 const api = new Client()
 
@@ -98,6 +98,34 @@ export function useUnfreezeUser() {
   })
 }
 
+export function useCustomer(userId: string) {
+  return useQuery({
+    queryKey: ['customers', userId],
+    queryFn: () => api.auth.GetUser({ user_id: userId }),
+    enabled: !!userId,
+  })
+}
+
+export function useCreateCustomer() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (params: CreateUserParams) => api.auth.CreateUser(params),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['customers'] })
+    },
+  })
+}
+
+export function useRegenerateApiKey() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (params: { user_id: string }) => api.auth.RegenerateApiKey(params),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['customers', variables.user_id] })
+    },
+  })
+}
+
 // --- Gateways ---
 
 export function useGateways() {
@@ -114,6 +142,32 @@ export function useToggleGateway() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['gateways'] })
     },
+  })
+}
+
+export function useCreateGateway() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (params: CreateGatewayParams) => api.routing.CreateGateway(params),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['gateways'] })
+    },
+  })
+}
+
+export function useUpdateGateway() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (params: { gateway_id: string } & Partial<CreateGatewayParams>) => api.routing.UpdateGateway(params),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['gateways'] })
+    },
+  })
+}
+
+export function useTestOriginate() {
+  return useMutation({
+    mutationFn: (params: { gateway_id: string; phone_number: string }) => api.routing.TestOriginate(params),
   })
 }
 
@@ -167,6 +221,48 @@ export function useCreateRatePlan() {
     mutationFn: api.billing.CreateRatePlan.bind(api.billing),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rate-plans'] })
+    },
+  })
+}
+
+export function useUpdateRatePlan() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: api.billing.CreateRatePlan.bind(api.billing), // TODO: Replace with UpdateRatePlan API
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['rate-plans'] })
+    },
+  })
+}
+
+export function useProfitByCustomer(period: 'today' | 'week' | 'month') {
+  return useQuery({
+    queryKey: ['profit', 'by-customer', period],
+    queryFn: async () => {
+      // TODO: Replace with real API
+      const names = ['示例科技', '通达通信', '星辰网络', '云桥通讯', '汇联科技', '盛达科技', '明远通讯', '华信网络', '联创科技', '金桥通信']
+      return names.map((name) => ({
+        name,
+        revenue: Math.floor(3000 + Math.random() * 20000),
+        cost: Math.floor(1500 + Math.random() * 10000),
+        profit: Math.floor(1000 + Math.random() * 10000),
+      }))
+    },
+  })
+}
+
+export function useProfitByGateway(period: 'today' | 'week' | 'month') {
+  return useQuery({
+    queryKey: ['profit', 'by-gateway', period],
+    queryFn: async () => {
+      // TODO: Replace with real API
+      const gateways = ['GW-SH-01', 'GW-BJ-02', 'GW-GZ-03', 'GW-SZ-04', 'GW-CD-05']
+      return gateways.map((name) => ({
+        name,
+        revenue: Math.floor(5000 + Math.random() * 30000),
+        cost: Math.floor(2500 + Math.random() * 15000),
+        profit: Math.floor(2000 + Math.random() * 15000),
+      }))
     },
   })
 }
@@ -296,5 +392,54 @@ export function useHealthCheck() {
     queryKey: ['health'],
     queryFn: () => api.routing.HealthCheck(),
     refetchInterval: 15_000,
+  })
+}
+
+export function useFSStatus() {
+  return useQuery({
+    queryKey: ['ops', 'fs-status'],
+    queryFn: async () => ({
+      instances: [
+        { hostname: 'fs-primary-01', connected: true, active_sessions: 42, uptime: '15d 8h 32m', last_check: new Date().toISOString() },
+        { hostname: 'fs-standby-02', connected: true, active_sessions: 0, uptime: '15d 8h 30m', last_check: new Date().toISOString() },
+      ],
+    }),
+    refetchInterval: 10_000,
+  })
+}
+
+export function useSystemHealth() {
+  return useQuery({
+    queryKey: ['ops', 'system-health'],
+    queryFn: async () => ({
+      database: { active: 8, idle: 12, max: 50, latency_ms: 3.2 },
+      redis: { connected: true, memory_mb: 128 },
+      api: { requests_per_min: 340, error_rate: 0.3, avg_latency_ms: 45 },
+    }),
+    refetchInterval: 30_000,
+  })
+}
+
+export function useSystemConfigs() {
+  return useQuery({
+    queryKey: ['settings', 'configs'],
+    queryFn: async () => ([
+      { key: 'call.max_duration', value: '3600', type: 'number', description: '最大通话时长(秒)', category: 'call', updated_at: '2026-03-10T10:00:00Z' },
+      { key: 'call.ring_timeout', value: '30', type: 'number', description: '振铃超时(秒)', category: 'call', updated_at: '2026-03-09T14:00:00Z' },
+      { key: 'billing.auto_deduct', value: 'true', type: 'boolean', description: '自动扣费', category: 'billing', updated_at: '2026-03-08T09:00:00Z' },
+      { key: 'billing.min_balance', value: '10', type: 'number', description: '最低余额警告(CNY)', category: 'billing', updated_at: '2026-03-07T16:00:00Z' },
+      { key: 'compliance.blacklist_enabled', value: 'true', type: 'boolean', description: '启用黑名单过滤', category: 'compliance', updated_at: '2026-03-06T11:00:00Z' },
+      { key: 'system.log_level', value: 'info', type: 'string', description: '日志级别', category: 'system', updated_at: '2026-03-05T08:00:00Z' },
+    ]),
+  })
+}
+
+export function useUpdateConfig() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (_params: { key: string; value: string }) => {},
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings', 'configs'] })
+    },
   })
 }

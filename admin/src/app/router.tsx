@@ -34,6 +34,7 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <LazyPage Component={Dashboard} /> },
       { path: 'customers', element: <LazyPage Component={Customers} /> },
+      { path: 'customers/:id', element: <LazyPage Component={Customers} /> },
       { path: 'gateways', element: <LazyPage Component={Gateways} /> },
       { path: 'cdr', element: <LazyPage Component={CDR} /> },
       { path: 'wastage', element: <LazyPage Component={Wastage} /> },
