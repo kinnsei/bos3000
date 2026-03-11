@@ -42,7 +42,10 @@ import { Separator } from '@/components/ui/separator'
 import { useTheme } from './providers'
 import { useAuth } from '@/lib/api/hooks'
 import { SkeletonPage } from '@/components/shared/skeleton-page'
+import { WsStatusBanner } from '@/components/shared/ws-status-banner'
+import { useCallWs } from '@/hooks/use-call-ws'
 import { useEffect } from 'react'
+import { APP_VERSION } from '@/lib/version'
 
 const menuGroups = [
   {
@@ -98,6 +101,7 @@ export function Layout() {
   const location = useLocation()
   const navigate = useNavigate()
   const { data: user } = useAuth()
+  const { status: wsStatus } = useCallWs()
 
   const toggleTheme = () => {
     setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')
@@ -149,6 +153,7 @@ export function Layout() {
             <SidebarTrigger />
             <Separator orientation="vertical" className="h-6" />
             <div className="flex-1" />
+            <span className="text-xs text-muted-foreground font-mono">v{APP_VERSION}</span>
             <Button variant="ghost" size="icon" onClick={toggleTheme}>
               {resolvedTheme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
@@ -173,6 +178,7 @@ export function Layout() {
               </DropdownMenuContent>
             </DropdownMenu>
           </header>
+          <WsStatusBanner status={wsStatus} />
           <main className="flex-1 p-6">
             <Outlet />
           </main>

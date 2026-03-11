@@ -36,6 +36,7 @@ import { WsStatusBanner } from '@/components/shared/ws-status-banner'
 import { useCallWs } from '@/hooks/use-call-ws'
 import { menuGroups } from './nav-config'
 import { useEffect } from 'react'
+import { APP_VERSION } from '@/lib/version'
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { isLoading, isError } = useAuth()
@@ -112,6 +113,7 @@ export function Layout() {
             <SidebarTrigger />
             <Separator orientation="vertical" className="h-6" />
             <div className="flex-1" />
+            <span className="text-xs text-muted-foreground font-mono">v{APP_VERSION}</span>
             <Button variant="ghost" size="icon" onClick={toggleTheme}>
               {resolvedTheme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
