@@ -93,7 +93,7 @@ export function TestOriginateDialog({
             <div className="rounded-md border p-3 space-y-1">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium">结果：</span>
-                <Badge className={result.success ? 'bg-green-500/10 text-green-600' : 'bg-red-500/10 text-red-600'}>
+                <Badge className={result.success ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}>
                   {result.success ? '成功' : '失败'}
                 </Badge>
               </div>

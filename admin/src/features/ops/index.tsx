@@ -1,4 +1,3 @@
-import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { FsStatusCards } from './components/fs-status-cards'
 import { SystemHealth } from './components/system-health'
@@ -45,7 +44,7 @@ export default function Ops() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">运维监控</h1>
-        <p className="text-muted-foreground">FreeSWITCH 状态和系统健康监控</p>
+        <p className="text-sm text-muted-foreground">FreeSWITCH 状态和系统健康监控</p>
       </div>
 
       <FsStatusCards />

@@ -96,8 +96,8 @@ export function DidTable({
               variant="secondary"
               className={
                 pool === 'dedicated'
-                  ? 'bg-blue-500/10 text-blue-600'
-                  : 'bg-gray-500/10 text-gray-600'
+                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                  : 'bg-gray-100 text-gray-700 dark:bg-gray-800/50 dark:text-gray-400'
               }
             >
               {pool === 'dedicated' ? '专属' : '共享'}
@@ -115,8 +115,8 @@ export function DidTable({
             <Badge
               className={
                 status === 'active'
-                  ? 'bg-green-500/10 text-green-600'
-                  : 'bg-red-500/10 text-red-600'
+                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                  : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
               }
             >
               {status === 'active' ? '启用' : '停用'}

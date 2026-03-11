@@ -90,7 +90,7 @@ function ConfigRow({ item, onSave }: { item: ConfigItem; onSave: (key: string, v
               )}
             </div>
             {editing && (
-              <span className={`text-xs ${isValidJson(draft) ? 'text-green-600' : 'text-destructive'}`}>
+              <span className={`text-xs ${isValidJson(draft) ? 'text-green-600 dark:text-green-400' : 'text-destructive'}`}>
                 {isValidJson(draft) ? 'JSON 格式有效' : 'JSON 格式无效'}
               </span>
             )}

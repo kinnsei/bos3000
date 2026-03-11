@@ -85,7 +85,7 @@ export function CustomerTable({
         cell: ({ row }) => {
           const status = row.original.status
           return (
-            <Badge className={status === 'active' ? 'bg-green-500/10 text-green-600' : 'bg-red-500/10 text-red-600'}>
+            <Badge className={status === 'active' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}>
               {status === 'active' ? '正常' : '已冻结'}
             </Badge>
           )

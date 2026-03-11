@@ -7,7 +7,7 @@ export default function Compliance() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">合规审计</h1>
-        <p className="text-muted-foreground">全局黑名单管理和审计日志查询</p>
+        <p className="text-sm text-muted-foreground">全局黑名单管理和审计日志查询</p>
       </div>
 
       <Tabs defaultValue="blacklist">

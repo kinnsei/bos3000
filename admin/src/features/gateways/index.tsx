@@ -114,10 +114,10 @@ export default function Gateways() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">网关管理</h1>
-          <p className="text-muted-foreground">A/B 路网关池和健康状态管理</p>
+          <p className="text-sm text-muted-foreground">A/B 路网关池和健康状态管理</p>
         </div>
         <Button onClick={handleAddGateway}>
-          <Plus className="mr-2 h-4 w-4" />
+          <Plus className="mr-1.5 h-4 w-4" />
           添加网关
         </Button>
       </div>

@@ -83,7 +83,7 @@ export default function Customers() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">客户管理</h1>
-          <p className="text-muted-foreground">客户列表、开户、充值与冻结</p>
+          <p className="text-sm text-muted-foreground">客户列表、开户、充值与冻结</p>
         </div>
         <Button onClick={() => setCreateOpen(true)}>
           <Plus className="mr-1.5 h-4 w-4" />

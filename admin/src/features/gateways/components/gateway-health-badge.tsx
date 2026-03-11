@@ -4,17 +4,17 @@ const statusConfig = {
   up: {
     label: '在线',
     dotClass: 'bg-green-500',
-    badgeClass: 'bg-green-500/10 text-green-600',
+    badgeClass: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
   },
   down: {
     label: '异常',
     dotClass: 'bg-red-500 animate-pulse',
-    badgeClass: 'bg-red-500/10 text-red-600',
+    badgeClass: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
   },
   disabled: {
     label: '已禁用',
     dotClass: 'bg-gray-400',
-    badgeClass: 'bg-gray-500/10 text-gray-500',
+    badgeClass: 'bg-gray-100 text-gray-700 dark:bg-gray-800/50 dark:text-gray-400',
   },
 } as const
 

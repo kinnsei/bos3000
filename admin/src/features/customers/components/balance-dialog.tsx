@@ -87,7 +87,7 @@ export function BalanceDialog({ open, onOpenChange, mode, customer, onSubmit }: 
             />
             {errors.amount && <p className="text-xs text-destructive">{errors.amount.message}</p>}
             {exceedsBalance && (
-              <p className="text-xs text-red-600 font-medium">扣款金额超过当前余额，请注意!</p>
+              <p className="text-xs text-red-600 dark:text-red-400 font-medium">扣款金额超过当前余额，请注意!</p>
             )}
           </div>
 
