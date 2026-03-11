@@ -19,11 +19,9 @@ var db = sqldb.NewDatabase("callback", sqldb.DatabaseConfig{
 
 // CallbackConfig holds FreeSWITCH connection configuration.
 type CallbackConfig struct {
-	FSMode            config.String // "mock" or "real"
-	FSPrimaryAddress  config.String
-	FSPrimaryPassword config.String
-	FSStandbyAddress  config.String
-	FSStandbyPassword config.String
+	FSMode     config.String // "mock" or "real"
+	FSAddress  config.String
+	FSPassword config.String
 }
 
 var cfg = config.Load[*CallbackConfig]()
@@ -46,14 +44,11 @@ func initService() (*Service, error) {
 
 	fsMode := cfg.FSMode()
 	if fsMode == "real" {
-		primaryAddr := cfg.FSPrimaryAddress()
-		primaryPwd := cfg.FSPrimaryPassword()
-		standbyAddr := cfg.FSStandbyAddress()
-		standbyPwd := cfg.FSStandbyPassword()
+		addr := cfg.FSAddress()
+		pwd := cfg.FSPassword()
 
-		manager := fsclient.NewFSClientManager(primaryAddr, primaryPwd, standbyAddr, standbyPwd, func(failedIdx int) {
-			rlog.Error("FreeSWITCH failover triggered", "failed_idx", failedIdx)
-			// Finalize all in-flight calls on the failed instance
+		manager := fsclient.NewFSClientManager(addr, pwd, func() {
+			rlog.Error("FreeSWITCH disconnected, finalizing in-flight calls")
 			svc.activeCalls.Range(func(key, value any) bool {
 				ac := value.(*activeCall)
 				reason := "fs_connection_lost"
@@ -71,18 +66,14 @@ func initService() (*Service, error) {
 
 		svc.fsManager = manager
 
-		// Pick initial client for event handler registration
 		client, err := manager.Pick()
 		if err != nil {
 			return nil, fmt.Errorf("fsclient manager pick: %w", err)
 		}
 		svc.fsClient = client
-
-		// Register event handlers on all managed instances
 		svc.registerEventHandlers(client)
 
-		rlog.Info("running in real FSClient mode",
-			"primary", primaryAddr, "standby", standbyAddr)
+		rlog.Info("running in real FSClient mode", "address", addr)
 	} else {
 		mockClient := fsclient.NewMockFSClient(fsclient.MockConfig{
 			ALegResult:     "answer",
