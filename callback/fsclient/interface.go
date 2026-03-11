@@ -8,6 +8,7 @@ import "context"
 type FSClient interface {
 	OriginateALeg(ctx context.Context, params OriginateParams) (uuid string, err error)
 	OriginateBLegAndBridge(ctx context.Context, aUUID string, params OriginateParams) (bUUID string, err error)
+	BridgeCall(ctx context.Context, aUUID, bUUID string) error
 	HangupCall(ctx context.Context, uuid string, cause string) error
 	StartRecording(ctx context.Context, uuid string, callID string, leg string) error
 	StopRecording(ctx context.Context, uuid string, callID string, leg string) error

@@ -1,7 +1,7 @@
 package callback
 
-FSMode:            string | *"mock"
-FSPrimaryAddress:  string | *"localhost:8021"
+FSMode:            string | *"real"
+FSPrimaryAddress:  string | *"localhost:18021"
 FSPrimaryPassword: string | *"ClueCon"
-FSStandbyAddress:  string | *"localhost:8022"
+FSStandbyAddress:  string | *"localhost:18022"
 FSStandbyPassword: string | *"ClueCon"

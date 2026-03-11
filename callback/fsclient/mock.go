@@ -173,6 +173,10 @@ func (m *MockFSClient) OriginateBLegAndBridge(ctx context.Context, aUUID string,
 	return uuid, nil
 }
 
+func (m *MockFSClient) BridgeCall(ctx context.Context, aUUID, bUUID string) error {
+	return nil
+}
+
 func (m *MockFSClient) HangupCall(ctx context.Context, uuid string, cause string) error {
 	m.callsMu.Lock()
 	cs, ok := m.calls[uuid]

@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<!DOCTYPE scenario SYSTEM "sipp.dtd">
+<!--
+  BOS3000 SIPp UAS - simulates no answer (ring then timeout).
+  Usage: sipp -sf uas_noanswer.xml -p 6090 -m 10
+-->
+<scenario name="BOS3000 UAS - No Answer">
+
+  <recv request="INVITE" crlf="true"/>
+
+  <send>
+    <![CDATA[
+      SIP/2.0 100 Trying
+      [last_Via:]
+      [last_From:]
+      [last_To:];tag=[pid]SIPpTag03[call_number]
+      [last_Call-ID:]
+      [last_CSeq:]
+      Content-Length: 0
+
+    ]]>
+  </send>
+
+  <pause milliseconds="200"/>
+
+  <send>
+    <![CDATA[
+      SIP/2.0 180 Ringing
+      [last_Via:]
+      [last_From:]
+      [last_To:];tag=[pid]SIPpTag03[call_number]
+      [last_Call-ID:]
+      [last_CSeq:]
+      Content-Length: 0
+
+    ]]>
+  </send>
+
+  <!-- Ring for 30s then send 408 Request Timeout -->
+  <pause milliseconds="30000"/>
+
+  <send retrans="500">
+    <![CDATA[
+      SIP/2.0 408 Request Timeout
+      [last_Via:]
+      [last_From:]
+      [last_To:];tag=[pid]SIPpTag03[call_number]
+      [last_Call-ID:]
+      [last_CSeq:]
+      Content-Length: 0
+
+    ]]>
+  </send>
+
+  <recv request="ACK" optional="false" crlf="true"/>
+
+</scenario>

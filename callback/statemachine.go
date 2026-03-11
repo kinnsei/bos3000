@@ -146,6 +146,17 @@ func (s *Service) runCall(ctx context.Context, call *CallbackCall) {
 				_ = updateCallStatus(ctx, call.CallID, "b_connected")
 				s.publishWebhook(ctx, call)
 
+				// Bridge A and B legs now that B has answered
+				if err := s.fsClient.BridgeCall(ctx, aUUID, bUUID); err != nil {
+					rlog.Error("bridge failed", "call_id", call.CallID, "error", err)
+					_ = s.fsClient.HangupCall(ctx, aUUID, "NORMAL_CLEARING")
+					_ = s.fsClient.HangupCall(ctx, bUUID, "NORMAL_CLEARING")
+					reason := "bridge_failed"
+					call.FailureReason = &reason
+					s.finalizeCall(ctx, call, "failed")
+					return
+				}
+
 			case event.EventName == "CHANNEL_BRIDGE":
 				bridgeAt := event.Timestamp
 				call.BridgeAt = &bridgeAt
