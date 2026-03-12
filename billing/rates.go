@@ -83,6 +83,15 @@ func (s *Service) CreateRatePlan(ctx context.Context, p *CreateRatePlanParams) (
 		return nil, err
 	}
 
+	// Check for duplicate name.
+	var exists bool
+	if err := db.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM rate_plans WHERE name = $1)", p.Name).Scan(&exists); err != nil {
+		return nil, fmt.Errorf("check duplicate: %w", err)
+	}
+	if exists {
+		return nil, &errs.Error{Code: errs.AlreadyExists, Message: "rate plan with this name already exists"}
+	}
+
 	var aRate, bRate *int64
 	if p.UniformARate != nil {
 		v := int64(*p.UniformARate)
@@ -195,6 +204,24 @@ func (s *Service) GetRatePlan(ctx context.Context, id int64) (*RatePlanResponse,
 		return nil, fmt.Errorf("get rate plan: %w", err)
 	}
 	return resp, nil
+}
+
+// DeleteRatePlan deletes a rate plan by ID (admin only).
+//
+//encore:api auth method=DELETE path=/billing/rate-plans/:id
+func (s *Service) DeleteRatePlan(ctx context.Context, id int64) error {
+	if err := requireAdmin(); err != nil {
+		return err
+	}
+
+	result, err := db.Exec(ctx, `DELETE FROM rate_plans WHERE id=$1`, id)
+	if err != nil {
+		return fmt.Errorf("delete rate plan: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return &errs.Error{Code: errs.NotFound, Message: "rate plan not found"}
+	}
+	return nil
 }
 
 // --- Prefix Rates ---

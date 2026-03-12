@@ -253,10 +253,10 @@ class AuthService {
   }
 
   async RegenerateApiKey(params: { user_id: string }): Promise<{ api_key: string }> {
-    return request(`/api/auth/api-keys`, {
+    const resp = await request<{ key: string }>(`/api/auth/admin/users/${params.user_id}/api-key`, {
       method: 'POST',
-      body: JSON.stringify({}),
     })
+    return { api_key: resp.key }
   }
 }
 
@@ -299,6 +299,20 @@ class BillingService {
     return request('/api/billing/rate-plans', {
       method: 'POST',
       body: JSON.stringify(params),
+    })
+  }
+
+  async UpdateRatePlan(params: { id: string } & Partial<Omit<RatePlan, 'id'>>): Promise<RatePlan> {
+    const { id, ...body } = params
+    return request(`/api/billing/rate-plans/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    })
+  }
+
+  async DeleteRatePlan(params: { id: string }): Promise<void> {
+    return request(`/api/billing/rate-plans/${params.id}`, {
+      method: 'DELETE',
     })
   }
 }

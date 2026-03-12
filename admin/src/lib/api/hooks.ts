@@ -228,7 +228,17 @@ export function useCreateRatePlan() {
 export function useUpdateRatePlan() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: api.billing.CreateRatePlan.bind(api.billing), // TODO: Replace with UpdateRatePlan API
+    mutationFn: api.billing.UpdateRatePlan.bind(api.billing),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['rate-plans'] })
+    },
+  })
+}
+
+export function useDeleteRatePlan() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (params: { id: string }) => api.billing.DeleteRatePlan(params),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rate-plans'] })
     },

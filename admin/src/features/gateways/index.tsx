@@ -67,7 +67,7 @@ export default function Gateways() {
 
   const confirmToggle = async () => {
     if (!toggleTarget) return
-    const enabling = toggleTarget.status === 'disabled' || toggleTarget.status === 'down'
+    const enabling = !toggleTarget.enabled
     try {
       await toggleMutation.mutateAsync({
         gateway_id: toggleTarget.id,
@@ -185,10 +185,10 @@ export default function Gateways() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {toggleTarget?.status === 'up' ? '确认下线网关' : '确认上线网关'}
+              {toggleTarget?.health_status === 'up' ? '确认下线网关' : '确认上线网关'}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {toggleTarget?.status === 'up'
+              {toggleTarget?.health_status === 'up'
                 ? `确认将网关 ${toggleTarget?.name} 下线？下线后该网关将不再接收新呼叫。`
                 : `确认将网关 ${toggleTarget?.name} 上线？`}
             </AlertDialogDescription>

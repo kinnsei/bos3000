@@ -25,6 +25,9 @@ type CreateAPIKeyResponse struct {
 //encore:api auth method=POST path=/auth/api-keys
 func (s *Service) CreateAPIKey(ctx context.Context) (*CreateAPIKeyResponse, error) {
 	data := Data()
+	if data == nil {
+		return nil, &errs.Error{Code: errs.Unauthenticated, Message: "not authenticated"}
+	}
 
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
@@ -72,6 +75,9 @@ type ListAPIKeysResponse struct {
 //encore:api auth method=GET path=/auth/api-keys
 func (s *Service) ListAPIKeys(ctx context.Context) (*ListAPIKeysResponse, error) {
 	data := Data()
+	if data == nil {
+		return nil, &errs.Error{Code: errs.Unauthenticated, Message: "not authenticated"}
+	}
 
 	rows, err := db.Query(ctx, `
 		SELECT id, prefix, status, created_at, last_used_at
@@ -231,9 +237,53 @@ func (s *Service) ListIPWhitelist(ctx context.Context, id int64) (*IPListRespons
 	return &IPListResponse{IPs: ips}, nil
 }
 
+// AdminCreateAPIKeyForUser creates (or regenerates) an API key for a specific user (admin only).
+//
+//encore:api auth method=POST path=/auth/admin/users/:userId/api-key
+func (s *Service) AdminCreateAPIKeyForUser(ctx context.Context, userId int64) (*CreateAPIKeyResponse, error) {
+	data := Data()
+	if data == nil || data.Role != "admin" {
+		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "admin access required"}
+	}
+
+	// Revoke existing active keys for this user.
+	_, _ = db.Exec(ctx, `UPDATE api_keys SET status = 'revoked' WHERE user_id = $1 AND status = 'active'`, userId)
+
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return nil, &errs.Error{Code: errs.Internal, Message: "failed to generate key"}
+	}
+
+	encoded := base64.RawURLEncoding.EncodeToString(raw)
+	fullKey := "bos_" + encoded
+	prefix := fullKey[:12]
+
+	hash := sha256.Sum256([]byte(fullKey))
+	keyHash := fmt.Sprintf("%x", hash)
+
+	var id int64
+	err := db.QueryRow(ctx, `
+		INSERT INTO api_keys (user_id, prefix, key_hash)
+		VALUES ($1, $2, $3)
+		RETURNING id
+	`, userId, prefix, keyHash).Scan(&id)
+	if err != nil {
+		return nil, &errs.Error{Code: errs.Internal, Message: "failed to create API key"}
+	}
+
+	return &CreateAPIKeyResponse{
+		ID:     id,
+		Key:    fullKey,
+		Prefix: prefix,
+	}, nil
+}
+
 // verifyKeyOwnership checks that the current user owns the API key, or is admin.
 func (s *Service) verifyKeyOwnership(ctx context.Context, keyID int64) error {
 	data := Data()
+	if data == nil {
+		return &errs.Error{Code: errs.Unauthenticated, Message: "not authenticated"}
+	}
 	if data.Role == "admin" {
 		return nil
 	}

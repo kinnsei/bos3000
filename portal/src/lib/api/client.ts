@@ -70,9 +70,16 @@ export interface CDR {
   a_number: string
   b_number: string
   status: string
+  bridge_duration_ms: number
+  total_cost: number
+  failure_reason?: string
+  created_at: string
+  // computed helpers
+  caller: string
+  callee: string
   duration: number
   cost: number
-  created_at: string
+  started_at: string
   ended_at: string
 }
 
@@ -198,7 +205,7 @@ class CallbackService {
   }
 
   async listCDRs(params: PaginatedParams & { start_date?: string; end_date?: string; status?: string; search?: string }): Promise<{ cdrs: CDR[]; total: number }> {
-    const resp = await request<{ items: CDR[]; total: number }>(
+    const resp = await request<{ items: Array<Omit<CDR, 'caller' | 'callee' | 'duration' | 'cost' | 'started_at' | 'ended_at'>>; total: number }>(
       `/api/callbacks${qs({
         page: params.page,
         page_size: params.limit,
@@ -207,14 +214,32 @@ class CallbackService {
         status: params.status,
       })}`
     )
-    return { cdrs: resp.items || [], total: resp.total || 0 }
+    const cdrs = (resp.items || []).map((item) => ({
+      ...item,
+      caller: item.a_number,
+      callee: item.b_number,
+      duration: Math.round(item.bridge_duration_ms / 1000),
+      cost: item.total_cost / 100,
+      started_at: item.created_at,
+      ended_at: item.created_at,
+    }))
+    return { cdrs, total: resp.total || 0 }
   }
 
   async listActiveCalls(): Promise<{ calls: CDR[] }> {
-    const resp = await request<{ items: CDR[]; total: number }>(
+    const resp = await request<{ items: Array<Omit<CDR, 'caller' | 'callee' | 'duration' | 'cost' | 'started_at' | 'ended_at'>>; total: number }>(
       `/api/callbacks${qs({ page: 1, page_size: 100, status: 'in_progress' })}`
     )
-    return { calls: resp.items || [] }
+    const calls = (resp.items || []).map((item) => ({
+      ...item,
+      caller: item.a_number,
+      callee: item.b_number,
+      duration: Math.round(item.bridge_duration_ms / 1000),
+      cost: item.total_cost / 100,
+      started_at: item.created_at,
+      ended_at: item.created_at,
+    }))
+    return { calls }
   }
 
   async hangupCall(params: { call_id: string }): Promise<void> {

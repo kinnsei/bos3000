@@ -82,10 +82,10 @@ export function GatewayTable({
         ),
       },
       {
-        accessorKey: 'status',
+        accessorKey: 'health_status',
         header: '健康状态',
         enableSorting: false,
-        cell: ({ row }) => <GatewayHealthBadge status={row.original.status} />,
+        cell: ({ row }) => <GatewayHealthBadge status={row.original.health_status} />,
       },
     ]
 
@@ -128,7 +128,7 @@ export function GatewayTable({
         enableSorting: false,
         cell: ({ row }) => (
           <Switch
-            checked={row.original.status !== 'disabled'}
+            checked={row.original.enabled}
             onCheckedChange={(checked) => onSwitchToggle(row.original, checked)}
           />
         ),
@@ -149,7 +149,7 @@ export function GatewayTable({
         enableSorting: false,
         cell: ({ row }) => {
           const gw = row.original
-          const isUp = gw.status === 'up'
+          const isUp = gw.health_status === 'up'
           return (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

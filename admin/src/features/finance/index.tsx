@@ -14,7 +14,7 @@ import { toast } from 'sonner'
 import { TransactionTable } from './components/transaction-table'
 import { RatePlanSheet, type RatePlanFormData, type RatePlanForEdit } from './components/rate-plan-sheet'
 import { ProfitAnalysis } from './components/profit-analysis'
-import { useRatePlans, useCreateRatePlan } from '@/lib/api/hooks'
+import { useRatePlans, useCreateRatePlan, useUpdateRatePlan, useDeleteRatePlan } from '@/lib/api/hooks'
 import type { RatePlan } from '@/lib/api/client'
 
 const ratePlanColumns: ColumnDef<RatePlan, unknown>[] = [
@@ -47,6 +47,8 @@ export default function Finance() {
 
   const { data: ratePlanData, isLoading } = useRatePlans()
   const createMutation = useCreateRatePlan()
+  const updateMutation = useUpdateRatePlan()
+  const deleteMutation = useDeleteRatePlan()
 
   const ratePlans = ratePlanData?.plans ?? []
 
@@ -67,26 +69,42 @@ export default function Finance() {
     setSheetOpen(true)
   }, [])
 
-  const handleDeletePlan = useCallback((plan: RatePlan) => {
-    toast.success(`已删除模板: ${plan.name}`)
-  }, [])
+  const handleDeletePlan = useCallback(async (plan: RatePlan) => {
+    try {
+      await deleteMutation.mutateAsync({ id: String(plan.id) })
+      toast.success(`已删除模板: ${plan.name}`)
+    } catch {
+      toast.error('删除失败')
+    }
+  }, [deleteMutation])
 
   const handleSubmitPlan = useCallback(async (data: RatePlanFormData) => {
     try {
-      await createMutation.mutateAsync({
-        name: data.name,
-        mode: 'uniform',
-        uniform_a_rate: Math.round(data.rate_per_minute * 100),
-        uniform_b_rate: Math.round(data.rate_per_minute * 100),
-        description: data.description,
-        created_at: '',
-        updated_at: '',
-      })
+      if (editingPlan) {
+        await updateMutation.mutateAsync({
+          id: editingPlan.id,
+          name: data.name,
+          mode: 'uniform',
+          uniform_a_rate: Math.round(data.rate_per_minute * 100),
+          uniform_b_rate: Math.round(data.rate_per_minute * 100),
+          description: data.description,
+        })
+      } else {
+        await createMutation.mutateAsync({
+          name: data.name,
+          mode: 'uniform',
+          uniform_a_rate: Math.round(data.rate_per_minute * 100),
+          uniform_b_rate: Math.round(data.rate_per_minute * 100),
+          description: data.description,
+          created_at: '',
+          updated_at: '',
+        })
+      }
       toast.success(editingPlan ? '模板已更新' : '模板已创建')
     } catch {
       toast.error('操作失败')
     }
-  }, [editingPlan, createMutation])
+  }, [editingPlan, createMutation, updateMutation])
 
   const rpColumnsWithActions = useMemo<ColumnDef<RatePlan, unknown>[]>(() => [
     ...ratePlanColumns,
