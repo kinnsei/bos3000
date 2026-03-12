@@ -62,7 +62,7 @@ mkdir -p "$DIST"
 IMAGE_TAG="bos3000:${VERSION}"
 
 # Build docker image (needed for both modes — binary is extracted from it)
-encore build docker "$IMAGE_TAG" --arch amd64 --base ubuntu:22.04 --skip-config
+encore build docker "$IMAGE_TAG" --arch amd64 --base ubuntu:22.04 --skip-config 2>&1
 
 # ---- Step 4: Extract binary ----
 if $BUILD_BINARY; then
