@@ -43,6 +43,7 @@ import { useTheme } from './providers'
 import { useAuth } from '@/lib/api/hooks'
 import { SkeletonPage } from '@/components/shared/skeleton-page'
 import { WsStatusBanner } from '@/components/shared/ws-status-banner'
+import { Logo, LogoIcon } from '@/components/shared/logo'
 import { useCallWs } from '@/hooks/use-call-ws'
 import { useEffect } from 'react'
 import { APP_VERSION } from '@/lib/version'
@@ -110,9 +111,17 @@ export function Layout() {
   return (
     <AuthGuard>
       <SidebarProvider>
-        <Sidebar>
-          <SidebarHeader className="border-b px-4 py-3">
-            <span className="text-lg font-bold tracking-tight">BOS3000</span>
+        <Sidebar collapsible="icon">
+          <SidebarHeader className="border-b px-4 py-3 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:py-3">
+            {/* Expanded: full logo with text */}
+            <div className="group-data-[collapsible=icon]:hidden">
+              <Logo size="sm" />
+              <span className="text-xs text-muted-foreground mt-0.5 block">管理后台</span>
+            </div>
+            {/* Collapsed: icon only, centered */}
+            <div className="hidden group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
+              <LogoIcon size="sm" />
+            </div>
           </SidebarHeader>
           <SidebarContent>
             {menuGroups.map((group) => (
@@ -137,14 +146,14 @@ export function Layout() {
               </SidebarGroup>
             ))}
           </SidebarContent>
-          <SidebarFooter className="border-t p-4">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <SidebarFooter className="border-t p-4 group-data-[collapsible=icon]:p-2">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground group-data-[collapsible=icon]:justify-center">
               <Avatar className="h-6 w-6">
                 <AvatarFallback className="text-xs">
                   {user?.username?.[0]?.toUpperCase() ?? 'A'}
                 </AvatarFallback>
               </Avatar>
-              <span className="truncate">{user?.username ?? '管理员'}</span>
+              <span className="truncate group-data-[collapsible=icon]:hidden">{user?.username ?? '管理员'}</span>
             </div>
           </SidebarFooter>
         </Sidebar>
