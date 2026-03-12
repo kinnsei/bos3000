@@ -46,7 +46,7 @@ done
 # ---- Step 2: Build frontends → gateway/{admin,portal}/ ----
 for app in admin portal; do
   echo "  Building $app frontend..."
-  (cd "$ROOT/$app" && npm ci --silent && npm run build)
+  (cd "$ROOT/$app" && npm ci --silent && npx vite build)
 done
 echo "  Frontend assets embedded in gateway/{admin,portal}/"
 
