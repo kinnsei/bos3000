@@ -193,16 +193,17 @@ cd portal && npm install && npm run dev   # http://localhost:5174
 
 ## Production Deployment
 
+Single binary, no Docker required.
+
 ```bash
-# 1. Build
+# 1. Build (produces dist/bos3000-v1.0.0-linux-amd64.tar.gz)
 bash scripts/build.sh v1.0.0
 
 # 2. Upload & install on server
-scp dist/bos3000-v1.0.0.tar.gz root@<server>:/tmp/
+scp dist/bos3000-v1.0.0-linux-amd64.tar.gz root@<server>:/tmp/
 ssh root@<server>
-tar xzf /tmp/bos3000-v1.0.0.tar.gz -C /tmp/bos3000-deploy
-cd /tmp/bos3000-deploy
-sudo bash deploy/install.sh --version v1.0.0 --eip <public-ip>
+tar xzf /tmp/bos3000-v1.0.0-linux-amd64.tar.gz -C /tmp
+sudo bash /tmp/bos3000/install.sh --eip <public-ip>
 
 # 3. Start
 sudo systemctl start bos3000

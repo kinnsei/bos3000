@@ -13,8 +13,6 @@ ExecStart=/opt/bos3000/bin/bos3000
 Restart=on-failure
 RestartSec=5
 LimitNOFILE=65535
-
-# Logging
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=bos3000

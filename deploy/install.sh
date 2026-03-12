@@ -1,34 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# BOS3000 Server Installation Script
+# BOS3000 Server Installation Script (single-binary, no Docker)
 # Supports: Ubuntu 22.04/24.04, CentOS 8+, AlmaLinux 8+
 #
 # Usage:
-#   sudo bash install.sh --version v1.0.0 --eip 47.xx.xx.xx
-#   sudo bash install.sh --version v1.0.0 --eip 47.xx.xx.xx --fs-address 10.0.0.2:8021
+#   sudo bash install.sh --eip 47.xx.xx.xx
+#   sudo bash install.sh --eip 47.xx.xx.xx --fs-address 10.0.0.2:8021
 
 # ---- Parse arguments ----
-VERSION=""
 EIP=""
 FS_ADDRESS="localhost:8021"
 FS_PASSWORD="ClueCon"
 INSTALL_DIR="/opt/bos3000"
-DB_PASSWORD=""
-JWT_SECRET=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
-    --version)    VERSION="$2"; shift 2 ;;
-    --eip)        EIP="$2"; shift 2 ;;
-    --fs-address) FS_ADDRESS="$2"; shift 2 ;;
+    --eip)         EIP="$2"; shift 2 ;;
+    --fs-address)  FS_ADDRESS="$2"; shift 2 ;;
     --fs-password) FS_PASSWORD="$2"; shift 2 ;;
     --install-dir) INSTALL_DIR="$2"; shift 2 ;;
     -h|--help)
-      echo "Usage: sudo bash install.sh --version <vX.Y.Z> --eip <elastic-ip>"
+      echo "Usage: sudo bash install.sh --eip <elastic-ip> [options]"
       echo ""
       echo "Options:"
-      echo "  --version      Required. Version tag (e.g. v1.0.0)"
       echo "  --eip          Required. Public/Elastic IP for SIP signaling"
       echo "  --fs-address   FreeSWITCH ESL address (default: localhost:8021)"
       echo "  --fs-password  FreeSWITCH ESL password (default: ClueCon)"
@@ -39,23 +34,32 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$VERSION" ]]; then
-  echo "Error: --version is required"
-  exit 1
-fi
 if [[ -z "$EIP" ]]; then
   echo "Error: --eip is required"
   exit 1
 fi
 
-# ---- Checks ----
 if [[ $EUID -ne 0 ]]; then
   echo "Error: This script must be run as root (use sudo)"
   exit 1
 fi
 
+# Detect version from .version file in the same directory
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+VERSION="unknown"
+if [[ -f "$SCRIPT_DIR/.version" ]]; then
+  VERSION="$(cat "$SCRIPT_DIR/.version")"
+fi
+
+# Check binary exists
+if [[ ! -f "$SCRIPT_DIR/bos3000" ]]; then
+  echo "Error: bos3000 binary not found in $SCRIPT_DIR"
+  echo "       Make sure you extracted the deployment bundle correctly."
+  exit 1
+fi
+
 echo "============================================"
-echo "  BOS3000 Installation  $VERSION"
+echo "  BOS3000 Installation  v${VERSION}"
 echo "============================================"
 echo ""
 
@@ -69,19 +73,17 @@ else
   exit 1
 fi
 
-echo "[1/9] System: $OS_ID $OS_VERSION ($(uname -m))"
+echo "[1/8] System: $OS_ID $OS_VERSION ($(uname -m))"
 
 IS_DEB=false
 IS_RPM=false
 case "$OS_ID" in
   ubuntu|debian)
-    IS_DEB=true
-    ;;
+    IS_DEB=true ;;
   centos|almalinux|rocky|rhel)
-    IS_RPM=true
-    ;;
+    IS_RPM=true ;;
   *)
-    echo "Warning: Untested OS ($OS_ID). Proceeding anyway..."
+    echo "Warning: Untested OS ($OS_ID). Proceeding..."
     if command -v apt-get &>/dev/null; then IS_DEB=true;
     elif command -v dnf &>/dev/null; then IS_RPM=true;
     else echo "Error: No supported package manager found"; exit 1; fi
@@ -89,7 +91,7 @@ case "$OS_ID" in
 esac
 
 # ---- Install PostgreSQL 16 ----
-echo "[2/9] Installing PostgreSQL 16..."
+echo "[2/8] Installing PostgreSQL 16..."
 
 if $IS_DEB; then
   if ! command -v psql &>/dev/null; then
@@ -114,7 +116,7 @@ fi
 echo "  PostgreSQL ready."
 
 # ---- Create database and user ----
-echo "[3/9] Setting up database..."
+echo "[3/8] Setting up database..."
 
 DB_PASSWORD=$(openssl rand -base64 24 | tr -dc 'a-zA-Z0-9' | head -c 24)
 
@@ -126,36 +128,30 @@ su - postgres -c "psql -tc \"SELECT 1 FROM pg_database WHERE datname='bos3000'\"
 
 echo "  Database bos3000 ready."
 
-# ---- Create system user ----
-echo "[4/9] Creating system user..."
+# ---- Create system user & deploy binary ----
+echo "[4/8] Deploying binary to $INSTALL_DIR ..."
 
 id -u bos3000 &>/dev/null || useradd -r -m -d "$INSTALL_DIR" -s /bin/bash bos3000
-mkdir -p "$INSTALL_DIR/bin" "$INSTALL_DIR/data"
+mkdir -p "$INSTALL_DIR/bin"
 
-echo "  User bos3000 ready."
+cp "$SCRIPT_DIR/bos3000" "$INSTALL_DIR/bin/bos3000"
+chmod +x "$INSTALL_DIR/bin/bos3000"
 
-# ---- Deploy binary ----
-echo "[5/9] Deploying BOS3000 $VERSION..."
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-
-# Copy deployment files
-cp -r "$SCRIPT_DIR"/* "$INSTALL_DIR/" 2>/dev/null || true
-
-# If docker image exists, load it
-DOCKER_IMG="$SCRIPT_DIR/../dist/bos3000-${VERSION}-docker.tar.gz"
-if [[ -f "$DOCKER_IMG" ]]; then
-  echo "  Loading Docker image..."
-  docker load < "$DOCKER_IMG"
+# Copy encore metadata (needed by runtime)
+if [[ -f "$SCRIPT_DIR/encore-meta" ]]; then
+  cp "$SCRIPT_DIR/encore-meta" "$INSTALL_DIR/bin/encore-meta"
 fi
 
-echo "  Deployed to $INSTALL_DIR"
+# Copy utility scripts
+cp "$SCRIPT_DIR/reset-admin-password.sh" "$INSTALL_DIR/" 2>/dev/null || true
+cp "$SCRIPT_DIR/.version" "$INSTALL_DIR/" 2>/dev/null || true
 
-# ---- Generate JWT secret ----
+echo "  Binary installed: $INSTALL_DIR/bin/bos3000"
+
+# ---- Generate secrets & write env ----
+echo "[5/8] Writing configuration..."
+
 JWT_SECRET=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c 32)
-
-# ---- Write environment file ----
-echo "[6/9] Writing configuration..."
 
 cat > "$INSTALL_DIR/.env" << ENVEOF
 # BOS3000 Production Configuration — Generated $(date -Iseconds)
@@ -184,20 +180,10 @@ ENVEOF
 chmod 600 "$INSTALL_DIR/.env"
 chown -R bos3000:bos3000 "$INSTALL_DIR"
 
-echo "  Configuration written to $INSTALL_DIR/.env"
-
-# ---- Set Encore secrets (if encore is installed) ----
-echo "[7/9] Setting up secrets..."
-
-if command -v encore &>/dev/null; then
-  echo "$JWT_SECRET" | encore secret set --type local JWTSecret 2>/dev/null || true
-  echo "  Encore secrets configured."
-else
-  echo "  Encore CLI not found, skipping Encore secrets. Set manually if using Encore runtime."
-fi
+echo "  Config: $INSTALL_DIR/.env"
 
 # ---- Configure firewall ----
-echo "[8/9] Configuring firewall..."
+echo "[6/8] Configuring firewall..."
 
 if command -v ufw &>/dev/null; then
   ufw allow 4000/tcp comment "BOS3000 API" >/dev/null 2>&1 || true
@@ -221,21 +207,46 @@ else
 fi
 
 # ---- Install systemd service ----
-echo "[9/9] Setting up systemd service..."
+echo "[7/8] Setting up systemd service..."
 
-cp "$INSTALL_DIR/bos3000.service" /etc/systemd/system/bos3000.service 2>/dev/null || true
+cat > /etc/systemd/system/bos3000.service << SVCEOF
+[Unit]
+Description=BOS3000 VoIP Callback Platform
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=bos3000
+Group=bos3000
+WorkingDirectory=$INSTALL_DIR
+EnvironmentFile=$INSTALL_DIR/.env
+ExecStart=$INSTALL_DIR/bin/bos3000
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65535
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bos3000
+
+[Install]
+WantedBy=multi-user.target
+SVCEOF
+
 systemctl daemon-reload
 systemctl enable bos3000
 
+# ---- Migrate database ----
+echo "[8/8] Database migrations will run on first start."
+
 echo ""
 echo "============================================"
-echo "  BOS3000 $VERSION Installation Complete"
+echo "  BOS3000 v${VERSION} Installation Complete"
 echo "============================================"
 echo ""
 echo "  Install dir:  $INSTALL_DIR"
-echo "  Config file:  $INSTALL_DIR/.env"
-echo "  Service:      systemctl {start|stop|restart|status} bos3000"
-echo "  Logs:         journalctl -u bos3000 -f"
+echo "  Binary:       $INSTALL_DIR/bin/bos3000"
+echo "  Config:       $INSTALL_DIR/.env"
 echo ""
 echo "  Database:"
 echo "    Host:       localhost:5432"
@@ -248,12 +259,14 @@ echo "    URL:        http://${EIP}:4000/admin/"
 echo "    Email:      admin@localhost"
 echo "    Password:   changeme123"
 echo ""
+echo "  Commands:"
+echo "    sudo systemctl start bos3000        # Start"
+echo "    sudo systemctl status bos3000       # Status"
+echo "    journalctl -u bos3000 -f            # Logs"
+echo "    bash $INSTALL_DIR/reset-admin-password.sh  # Reset password"
+echo ""
 echo "  IMPORTANT:"
 echo "    1. Change the default admin password immediately!"
-echo "    2. Save the database password shown above."
-echo "    3. Configure FreeSWITCH ESL in $INSTALL_DIR/.env"
-echo "    4. Start the service: sudo systemctl start bos3000"
-echo ""
-echo "  Reset admin password:"
-echo "    bash $INSTALL_DIR/reset-admin-password.sh"
+echo "    2. Save the database password above."
+echo "    3. Start: sudo systemctl start bos3000"
 echo ""

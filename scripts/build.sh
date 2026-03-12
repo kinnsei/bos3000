@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# BOS3000 Build Script
+# BOS3000 Build Script — produces a single deployment tarball
 # Usage: bash scripts/build.sh v1.0.0
 
 VERSION="${1:-}"
@@ -12,13 +12,13 @@ fi
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DIST="$ROOT/dist"
+STAGE="$DIST/stage"
+SEMVER="${VERSION#v}"
 
 echo "=== BOS3000 Build $VERSION ==="
 
 # ---- Step 1: Update frontend version ----
-SEMVER="${VERSION#v}"
 echo "$SEMVER" > "$ROOT/.version"
-
 for app in admin portal; do
   VERSION_FILE="$ROOT/$app/src/lib/version.ts"
   if [[ -f "$VERSION_FILE" ]]; then
@@ -28,49 +28,61 @@ for app in admin portal; do
   fi
 done
 
-# ---- Step 2: Build frontends ----
+# ---- Step 2: Build frontends → gateway/{admin,portal}/ ----
 for app in admin portal; do
   echo "  Building $app frontend..."
   (cd "$ROOT/$app" && npm ci --silent && npm run build)
 done
-
 echo "  Frontend assets embedded in gateway/{admin,portal}/"
 
-# ---- Step 3: Build Go binary via Encore ----
-echo "  Building Go binary..."
-
-# Check if encore CLI is available
-if command -v encore &>/dev/null; then
-  encore build docker "bos3000:${VERSION}" \
-    --base ubuntu:22.04 2>/dev/null && \
-    docker save "bos3000:${VERSION}" | gzip > "$DIST/bos3000-${VERSION}-docker.tar.gz" && \
-    echo "  Docker image saved to dist/bos3000-${VERSION}-docker.tar.gz"
-else
-  echo "  WARNING: encore CLI not found, skipping docker build"
-  echo "  Install Encore: curl -L https://encore.dev/install.sh | bash"
+# ---- Step 3: Build binary via Encore docker (then extract) ----
+echo "  Compiling linux/amd64 binary..."
+if ! command -v encore &>/dev/null; then
+  echo "  ERROR: encore CLI not found"
+  echo "  Install: curl -L https://encore.dev/install.sh | bash"
+  exit 1
 fi
 
-# ---- Step 4: Package deployment bundle ----
-mkdir -p "$DIST"
-BUNDLE="$DIST/bos3000-${VERSION}.tar.gz"
+IMAGE_TAG="bos3000-build:${VERSION}"
+encore build docker "$IMAGE_TAG" --arch amd64 --base ubuntu:22.04 --skip-config 2>/dev/null
 
-tar czf "$BUNDLE" \
-  --exclude='node_modules' \
-  --exclude='.git' \
-  --exclude='dist' \
-  --exclude='*_test.go' \
-  --exclude='_seed_hash.go' \
-  --exclude='.ralph-tui' \
-  --exclude='.beads' \
-  --exclude='.playwright-mcp' \
-  --exclude='admin-dashboard.png' \
-  -C "$ROOT" \
-  deploy/ \
-  scripts/reset-admin-password.sh \
-  .version
+# Extract binary from docker image
+CONTAINER_ID=$(docker create --platform linux/amd64 "$IMAGE_TAG")
+mkdir -p "$DIST"
+docker cp "$CONTAINER_ID":/artifacts/0/build/encore_app_out "$DIST/bos3000"
+docker cp "$CONTAINER_ID":/encore/meta "$DIST/encore-meta"
+docker rm "$CONTAINER_ID" >/dev/null
+docker rmi "$IMAGE_TAG" >/dev/null 2>&1 || true
+
+chmod +x "$DIST/bos3000"
+echo "  Binary: dist/bos3000 ($(du -h "$DIST/bos3000" | cut -f1))"
+
+# ---- Step 4: Package deployment tarball ----
+echo "  Packaging deployment bundle..."
+rm -rf "$STAGE"
+mkdir -p "$STAGE/bos3000"
+
+# Binary
+cp "$DIST/bos3000" "$STAGE/bos3000/bos3000"
+cp "$DIST/encore-meta" "$STAGE/bos3000/encore-meta"
+
+# Deploy scripts and config
+cp -r "$ROOT/deploy/"* "$STAGE/bos3000/"
+cp "$ROOT/scripts/reset-admin-password.sh" "$STAGE/bos3000/"
+echo "$SEMVER" > "$STAGE/bos3000/.version"
+
+BUNDLE="$DIST/bos3000-${VERSION}-linux-amd64.tar.gz"
+tar czf "$BUNDLE" -C "$STAGE" bos3000
+rm -rf "$STAGE"
 
 echo ""
 echo "=== Build Complete ==="
 echo "  Version:  $VERSION"
-echo "  Bundle:   $BUNDLE"
-echo "  Deploy:   Extract on server, then run: sudo bash deploy/install.sh --version $VERSION"
+echo "  Binary:   dist/bos3000 (linux/amd64)"
+echo "  Bundle:   $BUNDLE ($(du -h "$BUNDLE" | cut -f1))"
+echo ""
+echo "  Deploy to server:"
+echo "    scp $BUNDLE root@<server>:/tmp/"
+echo "    ssh root@<server>"
+echo "    tar xzf /tmp/bos3000-${VERSION}-linux-amd64.tar.gz -C /tmp"
+echo "    sudo bash /tmp/bos3000/install.sh --eip <public-ip>"
