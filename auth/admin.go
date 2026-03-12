@@ -23,6 +23,9 @@ type MeResponse struct {
 //encore:api auth method=GET path=/auth/me
 func (s *Service) Me(ctx context.Context) (*MeResponse, error) {
 	data := Data()
+	if data == nil {
+		return nil, &errs.Error{Code: errs.Unauthenticated, Message: "not authenticated"}
+	}
 
 	var resp MeResponse
 	err := db.QueryRow(ctx, `
@@ -72,7 +75,7 @@ type ListUsersResponse struct {
 //encore:api auth method=GET path=/auth/admin/users
 func (s *Service) ListUsers(ctx context.Context, p *ListUsersParams) (*ListUsersResponse, error) {
 	data := Data()
-	if data.Role != "admin" {
+	if data == nil || data.Role != "admin" {
 		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "admin access required"}
 	}
 
@@ -199,7 +202,7 @@ type UserDetail struct {
 //encore:api auth method=GET path=/auth/admin/users/:id
 func (s *Service) GetUser(ctx context.Context, id int64) (*UserDetail, error) {
 	data := Data()
-	if data.Role != "admin" {
+	if data == nil || data.Role != "admin" {
 		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "admin access required"}
 	}
 
@@ -261,7 +264,7 @@ type CreateUserResponse struct {
 //encore:api auth method=POST path=/auth/admin/users
 func (s *Service) CreateUser(ctx context.Context, req *CreateUserRequest) (*CreateUserResponse, error) {
 	data := Data()
-	if data.Role != "admin" {
+	if data == nil || data.Role != "admin" {
 		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "admin access required"}
 	}
 
@@ -297,7 +300,7 @@ func (s *Service) CreateUser(ctx context.Context, req *CreateUserRequest) (*Crea
 //encore:api auth method=POST path=/auth/admin/users/:id/freeze
 func (s *Service) FreezeUser(ctx context.Context, id int64) error {
 	data := Data()
-	if data.Role != "admin" {
+	if data == nil || data.Role != "admin" {
 		return &errs.Error{Code: errs.PermissionDenied, Message: "admin access required"}
 	}
 
@@ -315,12 +318,51 @@ func (s *Service) FreezeUser(ctx context.Context, id int64) error {
 	return nil
 }
 
+// ---- POST /auth/admin/reset-password ----
+
+// ResetPasswordRequest is the request body for resetting an admin user's password.
+type ResetPasswordRequest struct {
+	Email       string `json:"email"`
+	NewPassword string `json:"new_password"`
+}
+
+func (r *ResetPasswordRequest) Validate() error {
+	if r.Email == "" {
+		return &errs.Error{Code: errs.InvalidArgument, Message: "email is required"}
+	}
+	if len(r.NewPassword) < 8 {
+		return &errs.Error{Code: errs.InvalidArgument, Message: "password must be at least 8 characters"}
+	}
+	return nil
+}
+
+//encore:api private method=POST path=/auth/admin/reset-password
+func (s *Service) ResetAdminPassword(ctx context.Context, req *ResetPasswordRequest) error {
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return &errs.Error{Code: errs.Internal, Message: "failed to hash password"}
+	}
+
+	result, err := db.Exec(ctx, `
+		UPDATE users SET password_hash = $1, updated_at = NOW()
+		WHERE email = $2 AND role = 'admin'
+	`, string(hash), req.Email)
+	if err != nil {
+		return &errs.Error{Code: errs.Internal, Message: "failed to update password"}
+	}
+	if result.RowsAffected() == 0 {
+		return &errs.Error{Code: errs.NotFound, Message: "admin user not found"}
+	}
+
+	return nil
+}
+
 // ---- POST /auth/admin/users/:id/unfreeze ----
 
 //encore:api auth method=POST path=/auth/admin/users/:id/unfreeze
 func (s *Service) UnfreezeUser(ctx context.Context, id int64) error {
 	data := Data()
-	if data.Role != "admin" {
+	if data == nil || data.Role != "admin" {
 		return &errs.Error{Code: errs.PermissionDenied, Message: "admin access required"}
 	}
 
