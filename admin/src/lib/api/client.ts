@@ -262,14 +262,7 @@ class AuthService {
 
 class BillingService {
   async GetOverview(): Promise<OverviewResponse> {
-    // TODO: No real endpoint yet, return mock data
-    return {
-      concurrent_calls: 0,
-      today_revenue: 0,
-      today_wastage: 0,
-      bridge_success_rate: 100,
-      alerts: [],
-    }
+    return request('/api/analytics/overview')
   }
 
   async TopUp(params: { user_id: string; amount: number }): Promise<void> {
@@ -361,8 +354,10 @@ class RoutingService {
   }
 
   async TestOriginate(params: { gateway_id: string; phone_number: string }): Promise<TestOriginateResult> {
-    // TODO: No real endpoint yet
-    return { success: false, message: 'Test originate not yet implemented', duration_ms: 0 }
+    return request(`/api/routing/gateways/${params.gateway_id}/test-originate`, {
+      method: 'POST',
+      body: JSON.stringify({ phone_number: params.phone_number }),
+    })
   }
 }
 
@@ -425,10 +420,66 @@ class ComplianceService {
   }
 }
 
+class AnalyticsService {
+  async GetTrends(days = 7): Promise<{ trends: any[] }> {
+    return request(`/api/analytics/trends?days=${days}`)
+  }
+
+  async GetProfitByCustomer(period: string): Promise<{ items: any[] }> {
+    return request(`/api/analytics/profit/by-customer?period=${period}`)
+  }
+
+  async GetProfitByGateway(period: string): Promise<{ items: any[] }> {
+    return request(`/api/analytics/profit/by-gateway?period=${period}`)
+  }
+
+  async GetWastageSummary(): Promise<any> {
+    return request('/api/analytics/wastage/summary')
+  }
+
+  async GetWastageTrend(period: string): Promise<{ trend: any[] }> {
+    return request(`/api/analytics/wastage/trend?period=${period}`)
+  }
+
+  async GetWastageRanking(): Promise<{ items: any[] }> {
+    return request('/api/analytics/wastage/ranking')
+  }
+
+  async GetWastageDistribution(): Promise<{ items: any[] }> {
+    return request('/api/analytics/wastage/distribution')
+  }
+}
+
+class OpsService {
+  async GetFSStatus(): Promise<any> {
+    return request('/api/ops/fs-status')
+  }
+
+  async GetSystemHealth(): Promise<any> {
+    return request('/api/ops/system-health')
+  }
+}
+
+class SettingsService {
+  async ListConfigs(): Promise<{ configs: any[] }> {
+    return request('/api/settings/configs')
+  }
+
+  async UpdateConfig(key: string, value: string): Promise<void> {
+    return request(`/api/settings/configs/${encodeURIComponent(key)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ value }),
+    })
+  }
+}
+
 export default class Client {
   auth = new AuthService()
   billing = new BillingService()
   routing = new RoutingService()
   callback = new CallbackService()
   compliance = new ComplianceService()
+  analytics = new AnalyticsService()
+  ops = new OpsService()
+  settings = new SettingsService()
 }

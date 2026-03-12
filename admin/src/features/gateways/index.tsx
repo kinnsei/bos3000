@@ -4,7 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
-import { useGateways, useToggleGateway } from '@/lib/api/hooks'
+import { useGateways, useToggleGateway, useCreateGateway, useUpdateGateway, useTestOriginate } from '@/lib/api/hooks'
 import { GatewayTable } from './components/gateway-table'
 import { GatewayConfigSheet } from './components/gateway-config-sheet'
 import { TestOriginateDialog } from './components/test-originate-dialog'
@@ -44,6 +44,9 @@ export default function Gateways() {
   // Data
   const { data, isLoading } = useGateways()
   const toggleMutation = useToggleGateway()
+  const createGateway = useCreateGateway()
+  const updateGateway = useUpdateGateway()
+  const testOriginate = useTestOriginate()
 
   const allGateways = data?.gateways ?? []
   const aLegGateways = useMemo(() => allGateways.filter((gw) => gw.type === 'a_leg'), [allGateways])
@@ -96,17 +99,24 @@ export default function Gateways() {
   }, [])
 
   const handleTestOriginate = async (
-    _gatewayId: string,
-    _phoneNumber: string,
+    gatewayId: string,
+    phoneNumber: string,
   ): Promise<TestOriginateResult> => {
-    // TODO: Wire to real API
-    return { success: true, message: '测试呼叫成功', duration_ms: 1200 }
+    return testOriginate.mutateAsync({ gateway_id: gatewayId, phone_number: phoneNumber })
   }
 
   const handleSubmitConfig = async (formData: Record<string, unknown>) => {
-    // TODO: Wire to create/update gateway API
-    console.log('submit gateway config', formData)
-    toast.success(editingGateway ? '网关配置已更新' : '网关已创建')
+    try {
+      if (editingGateway) {
+        await updateGateway.mutateAsync({ gateway_id: String(editingGateway.id), ...formData } as any)
+      } else {
+        await createGateway.mutateAsync(formData as any)
+      }
+      toast.success(editingGateway ? '网关配置已更新' : '网关已创建')
+      setSheetOpen(false)
+    } catch {
+      toast.error('操作失败，请重试')
+    }
   }
 
   return (

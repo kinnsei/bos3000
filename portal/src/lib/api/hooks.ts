@@ -73,11 +73,10 @@ export function useDashboardTrends() {
   return useQuery({
     queryKey: ['portal', 'dashboard', 'trends'],
     queryFn: async () => {
-      // TODO: Replace with real API when backend provides trend endpoints
-      const days = ['03-05', '03-06', '03-07', '03-08', '03-09', '03-10', '03-11']
+      const data = await api.analytics.trends(7)
       return {
-        calls: days.map((d) => ({ date: d, calls: Math.floor(20 + Math.random() * 80) })),
-        cost: days.map((d) => ({ date: d, cost: Math.floor(100 + Math.random() * 500) })),
+        calls: data.trends.map((t: any) => ({ date: t.date.slice(5), calls: t.calls })),
+        cost: data.trends.map((t: any) => ({ date: t.date.slice(5), cost: t.revenue })),
       }
     },
     staleTime: 60_000,
@@ -163,14 +162,7 @@ export function useTransactions(params: PaginatedParams) {
 export function useWastageSummary() {
   return useQuery({
     queryKey: ['portal', 'wastage', 'summary'],
-    queryFn: async () => {
-      // TODO: Replace with real API
-      return {
-        today_wastage_cost: 45.67,
-        today_wastage_rate: 6.2,
-        top_failure_reason: 'B 路无应答',
-      }
-    },
+    queryFn: () => api.analytics.wastageSummary(),
   })
 }
 
@@ -178,13 +170,11 @@ export function useWastageTrend(period: 'day' | 'week' | 'month') {
   return useQuery({
     queryKey: ['portal', 'wastage', 'trend', period],
     queryFn: async () => {
-      // TODO: Replace with real API
-      const counts = { day: 24, week: 7, month: 30 }
-      const n = counts[period]
-      return Array.from({ length: n }, (_, i) => ({
-        date: period === 'day' ? `${i}:00` : period === 'week' ? `${i + 1}` : `${i + 1}`,
-        wastage_rate: +(3 + Math.random() * 8).toFixed(1),
-        bridge_rate: +(75 + Math.random() * 20).toFixed(1),
+      const data = await api.analytics.wastageTrend(period)
+      return (data.trend || []).map((t: any) => ({
+        date: t.date,
+        wastage_rate: t.wastage_rate,
+        bridge_rate: t.bridge_rate,
       }))
     },
   })
@@ -194,14 +184,11 @@ export function useWastageDistribution() {
   return useQuery({
     queryKey: ['portal', 'wastage', 'distribution'],
     queryFn: async () => {
-      // TODO: Replace with real API
-      return [
-        { reason: 'B路无应答', count: 42 },
-        { reason: 'A路接通B路失败', count: 28 },
-        { reason: '桥接后短时挂断', count: 16 },
-        { reason: 'B路忙线', count: 9 },
-        { reason: '其他', count: 5 },
-      ]
+      const data = await api.analytics.wastageDistribution()
+      return (data.items || []).map((item: any) => ({
+        reason: item.reason,
+        count: item.count,
+      }))
     },
   })
 }
@@ -220,25 +207,7 @@ export interface WastageDetail {
 export function useWastageDetail(params: PaginatedParams & { period?: string }) {
   return useQuery({
     queryKey: ['portal', 'wastage', 'detail', params],
-    queryFn: async () => {
-      // TODO: Replace with real API
-      const items: WastageDetail[] = Array.from({ length: params.limit }, (_, i) => {
-        const idx = (params.page - 1) * params.limit + i
-        const types = ['A路接通B路失败', '桥接后短时挂断', 'B路无应答', 'B路忙线']
-        const reasons = ['用户未接听', '号码不存在', '网络异常', '用户拒接', '占线']
-        return {
-          id: `wd-${idx}`,
-          call_id: `call-${1000 + idx}`,
-          caller: `138${String(10000000 + idx).slice(-8)}`,
-          callee: `139${String(20000000 + idx).slice(-8)}`,
-          wastage_type: types[idx % types.length],
-          wastage_cost: +(0.1 + Math.random() * 0.5).toFixed(2),
-          b_leg_reason: reasons[idx % reasons.length],
-          started_at: new Date(Date.now() - idx * 3600000).toISOString(),
-        }
-      })
-      return { items, total: 86 }
-    },
+    queryFn: () => api.analytics.wastageDetail(params),
   })
 }
 
@@ -276,17 +245,7 @@ export function useRegenerateApiKey() {
 export function useRateQuery(prefix: string) {
   return useQuery({
     queryKey: ['portal', 'rate-query', prefix],
-    queryFn: async () => {
-      // Mock data until backend is ready
-      if (!prefix || prefix.length < 2) return null
-      return {
-        plan_name: '标准套餐A',
-        rate_a: 0.06,
-        rate_b: 0.08,
-        billing_unit: 60,
-        effective_date: '2026-01-01',
-      } satisfies import('./client').RateQueryResult
-    },
+    queryFn: () => api.billing.queryRate(prefix),
     enabled: false,
   })
 }
@@ -296,24 +255,14 @@ export function useRateQuery(prefix: string) {
 export function useWebhookConfig() {
   return useQuery({
     queryKey: ['portal', 'webhook', 'config'],
-    queryFn: async () => {
-      // Mock data until backend is ready
-      return {
-        webhook_url: '',
-        webhook_secret: 'whsec_mock_abc123def456',
-      } satisfies import('./client').WebhookConfig
-    },
+    queryFn: () => api.webhook.getConfig(),
   })
 }
 
 export function useSaveWebhookConfig() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (_params: { webhook_url: string }) => {
-      // Mock mutation until backend is ready
-      await new Promise((r) => setTimeout(r, 500))
-      return undefined
-    },
+    mutationFn: (params: { webhook_url: string }) => api.webhook.saveConfig(params),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['portal', 'webhook', 'config'] })
     },
@@ -322,15 +271,7 @@ export function useSaveWebhookConfig() {
 
 export function useTestWebhook() {
   return useMutation({
-    mutationFn: async () => {
-      // Mock mutation until backend is ready
-      await new Promise((r) => setTimeout(r, 1000))
-      return {
-        success: true,
-        status_code: 200,
-        message: 'Webhook delivered successfully',
-      } satisfies import('./client').WebhookTestResult
-    },
+    mutationFn: () => api.webhook.test(),
   })
 }
 
@@ -338,31 +279,27 @@ export function useRecentDeliveries() {
   return useQuery({
     queryKey: ['portal', 'webhook', 'deliveries'],
     queryFn: async () => {
-      // Mock data until backend is ready
-      return Array.from({ length: 5 }, (_, i) => ({
-        id: `del-${i}`,
-        event: ['call.completed', 'call.failed', 'balance.low', 'call.started', 'call.completed'][i],
-        url: 'https://example.com/webhook',
-        status_code: i === 1 ? 500 : 200,
-        success: i !== 1,
-        created_at: new Date(Date.now() - i * 3600000).toISOString(),
-      })) satisfies import('./client').WebhookDelivery[]
+      const resp = await api.webhook.listDeliveries()
+      return resp.deliveries
     },
   })
 }
 
 // --- IP Whitelist ---
 
+export function useIpWhitelist() {
+  return useQuery({
+    queryKey: ['portal', 'ip-whitelist'],
+    queryFn: () => api.auth.listIps(),
+  })
+}
+
 export function useAddIp() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (_params: { ip: string }) => {
-      // Mock mutation until backend is ready
-      await new Promise((r) => setTimeout(r, 500))
-      return undefined
-    },
+    mutationFn: (params: { ip: string }) => api.auth.addIp(params),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['portal', 'auth'] })
+      queryClient.invalidateQueries({ queryKey: ['portal', 'ip-whitelist'] })
     },
   })
 }
@@ -370,13 +307,18 @@ export function useAddIp() {
 export function useRemoveIp() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (_params: { ip: string }) => {
-      // Mock mutation until backend is ready
-      await new Promise((r) => setTimeout(r, 500))
-      return undefined
-    },
+    mutationFn: (params: { ip: string }) => api.auth.removeIp(params),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['portal', 'auth'] })
+      queryClient.invalidateQueries({ queryKey: ['portal', 'ip-whitelist'] })
     },
+  })
+}
+
+// --- DID Pool ---
+
+export function useMyDIDs() {
+  return useQuery({
+    queryKey: ['portal', 'my-dids'],
+    queryFn: () => api.routing.myDIDs(),
   })
 }

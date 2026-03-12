@@ -8,6 +8,7 @@ import (
 
 	"encore.dev/beta/errs"
 
+	authpkg "encore.app/auth"
 	"encore.app/pkg/errcode"
 )
 
@@ -241,4 +242,42 @@ func (s *Service) ListDIDs(ctx context.Context, p *ListDIDsParams) (*ListDIDsRes
 		Page:       page,
 		TotalCount: total,
 	}, nil
+}
+
+// --- MyDIDs (portal: get current user's assigned DIDs) ---
+
+type MyDIDsResponse struct {
+	DIDs []string `json:"dids"`
+}
+
+//encore:api auth method=GET path=/routing/my-dids
+func (s *Service) MyDIDs(ctx context.Context) (*MyDIDsResponse, error) {
+	data := authpkg.Data()
+	if data == nil {
+		return nil, &errs.Error{Code: errs.Unauthenticated, Message: "not authenticated"}
+	}
+
+	rows, err := db.Query(ctx, `
+		SELECT number FROM did_numbers
+		WHERE user_id = $1 AND status = 'assigned'
+		ORDER BY number
+	`, data.UserID)
+	if err != nil {
+		return nil, &errs.Error{Code: errs.Internal, Message: "failed to list DIDs"}
+	}
+	defer rows.Close()
+
+	var dids []string
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			return nil, &errs.Error{Code: errs.Internal, Message: "failed to scan DID"}
+		}
+		dids = append(dids, n)
+	}
+	if dids == nil {
+		dids = []string{}
+	}
+
+	return &MyDIDsResponse{DIDs: dids}, nil
 }

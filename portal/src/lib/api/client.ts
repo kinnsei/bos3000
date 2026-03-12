@@ -185,14 +185,36 @@ class AuthService {
     })
   }
 
+  async listApiKeys(): Promise<{ keys: Array<{ id: number; prefix: string; status: string }> }> {
+    return request('/api/auth/api-keys')
+  }
+
   async addIp(params: { ip: string }): Promise<void> {
-    // TODO: Need to know API key ID - for now mock
-    return undefined as void
+    const { keys } = await this.listApiKeys()
+    const activeKey = keys.find((k) => k.status === 'active')
+    if (!activeKey) throw { code: 'NOT_FOUND', message: 'No active API key found' }
+    await request(`/api/auth/api-keys/${activeKey.id}/ips`, {
+      method: 'POST',
+      body: JSON.stringify({ ip: params.ip }),
+    })
   }
 
   async removeIp(params: { ip: string }): Promise<void> {
-    // TODO: Need to know API key ID - for now mock
-    return undefined as void
+    const { keys } = await this.listApiKeys()
+    const activeKey = keys.find((k) => k.status === 'active')
+    if (!activeKey) throw { code: 'NOT_FOUND', message: 'No active API key found' }
+    await request(`/api/auth/api-keys/${activeKey.id}/ips`, {
+      method: 'DELETE',
+      body: JSON.stringify({ ip: params.ip }),
+    })
+  }
+
+  async listIps(): Promise<string[]> {
+    const { keys } = await this.listApiKeys()
+    const activeKey = keys.find((k) => k.status === 'active')
+    if (!activeKey) return []
+    const resp = await request<{ ips: string[] }>(`/api/auth/api-keys/${activeKey.id}/ips`)
+    return resp.ips
   }
 }
 
@@ -266,27 +288,36 @@ class BillingService {
   }
 
   async getUsageSummary(): Promise<UsageSummary> {
-    // TODO: No real endpoint yet, return mock
+    const resp = await request<any>('/api/analytics/usage-summary')
     return {
-      today_calls: 0,
-      today_duration: 0,
-      today_cost: 0,
-      balance: 0,
-      concurrent_active: 0,
-      concurrent_limit: 10,
+      today_calls: resp.today_calls,
+      today_duration: resp.today_duration,
+      today_cost: resp.today_cost,
+      balance: resp.balance,
+      concurrent_active: resp.concurrent_active,
+      concurrent_limit: resp.concurrent_limit,
     }
   }
 
   async queryRate(prefix: string): Promise<RateQueryResult | null> {
-    // TODO: resolve-rate is a private endpoint
-    return null
+    try {
+      const resp = await request<any>(`/api/billing/rate-query?prefix=${encodeURIComponent(prefix)}`)
+      return {
+        plan_name: resp.plan_name,
+        rate_a: resp.rate_a,
+        rate_b: resp.rate_b,
+        billing_unit: resp.billing_unit,
+        effective_date: resp.effective_date,
+      }
+    } catch {
+      return null
+    }
   }
 }
 
 class WebhookService {
   async getConfig(): Promise<WebhookConfig> {
-    // TODO: No dedicated GET endpoint yet
-    return { webhook_url: '', webhook_secret: '' }
+    return request('/api/webhooks/config')
   }
 
   async saveConfig(params: { webhook_url: string }): Promise<void> {
@@ -297,8 +328,7 @@ class WebhookService {
   }
 
   async test(): Promise<WebhookTestResult> {
-    // TODO: No test endpoint yet
-    return { success: false, status_code: 0, message: 'Not implemented yet' }
+    return request('/api/webhooks/test', { method: 'POST' })
   }
 
   async listDeliveries(): Promise<{ deliveries: WebhookDelivery[] }> {
@@ -307,9 +337,44 @@ class WebhookService {
   }
 }
 
+class RoutingService {
+  async myDIDs(): Promise<string[]> {
+    const resp = await request<{ dids: string[] }>('/api/routing/my-dids')
+    return resp.dids
+  }
+}
+
+class AnalyticsService {
+  async trends(days = 7): Promise<{ trends: any[] }> {
+    return request(`/api/analytics/trends?days=${days}`)
+  }
+
+  async wastageSummary(): Promise<WastageSummary> {
+    return request('/api/analytics/wastage/summary')
+  }
+
+  async wastageTrend(period: string): Promise<{ trend: any[] }> {
+    return request(`/api/analytics/wastage/trend?period=${period}`)
+  }
+
+  async wastageDistribution(): Promise<{ items: any[] }> {
+    return request('/api/analytics/wastage/distribution')
+  }
+
+  async wastageDetail(params: PaginatedParams & { period?: string }): Promise<{ items: any[]; total: number }> {
+    return request(`/api/analytics/wastage/detail${qs({
+      page: params.page,
+      page_size: params.limit,
+      period: params.period,
+    })}`)
+  }
+}
+
 export default class PortalClient {
   auth = new AuthService()
   callback = new CallbackService()
   billing = new BillingService()
   webhook = new WebhookService()
+  routing = new RoutingService()
+  analytics = new AnalyticsService()
 }
