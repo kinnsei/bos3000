@@ -1,7 +1,7 @@
 [Unit]
 Description=BOS3000 VoIP Callback Platform
-After=network.target postgresql.service
-Wants=postgresql.service
+After=network.target postgresql.service redis.service freeswitch.service
+Wants=postgresql.service redis.service
 
 [Service]
 Type=simple

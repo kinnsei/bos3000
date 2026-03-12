@@ -1,6 +1,15 @@
 # BOS3000 Deployment Guide
 
-Single binary deployment — no Docker required.
+Single binary deployment — installer handles all dependencies.
+
+## What gets installed
+
+| Component | Version | Purpose |
+|-----------|---------|---------|
+| PostgreSQL | 16 | 6 databases (auth, billing, callback, compliance, routing, webhook) |
+| Redis | 7+ | Concurrent call slots, rate limiting cache |
+| FreeSWITCH | 1.10+ | SIP signaling, ESL control (optional: `--skip-freeswitch`) |
+| BOS3000 | bundle | Single binary with embedded frontend |
 
 ## Quick Start
 
@@ -11,7 +20,7 @@ bash scripts/build.sh v1.0.0
 # 2. Upload to server
 scp dist/bos3000-v1.0.0-linux-amd64.tar.gz root@<server>:/tmp/
 
-# 3. Install on server
+# 3. Install (installs PG + Redis + FS + binary + systemd)
 ssh root@<server>
 tar xzf /tmp/bos3000-v1.0.0-linux-amd64.tar.gz -C /tmp
 sudo bash /tmp/bos3000/install.sh --eip <your-public-ip>
@@ -20,36 +29,27 @@ sudo bash /tmp/bos3000/install.sh --eip <your-public-ip>
 sudo systemctl start bos3000
 ```
 
+## Installer options
+
+```
+--eip <ip>           Required. Public IP for SIP signaling
+--fs-password <pw>   FreeSWITCH ESL password (default: ClueCon)
+--install-dir <dir>  Install path (default: /opt/bos3000)
+--skip-freeswitch    Skip FS install (if using external FreeSWITCH)
+```
+
 ## What the installer does
 
-1. Installs PostgreSQL 16 (if not present)
-2. Creates database `bos3000` with random password
-3. Creates system user `bos3000`
-4. Copies binary to `/opt/bos3000/bin/bos3000`
-5. Generates JWT secret, writes `/opt/bos3000/.env`
-6. Configures firewall (ufw or firewalld)
-7. Installs systemd service
-
-## Prerequisites
-
-- Ubuntu 22.04/24.04 or CentOS 8+ / AlmaLinux 8+
-- Root access
-- Elastic IP (EIP) for SIP signaling
-- FreeSWITCH (external, or install separately)
-
-## Bundle contents
-
-```
-bos3000/
-├── bos3000                    # Linux amd64 binary (single file)
-├── encore-meta                # Encore runtime metadata
-├── install.sh                 # Installer script
-├── reset-admin-password.sh    # Password reset utility
-├── env.example                # Environment variable reference
-├── bos3000.service            # systemd unit (reference only, installer generates its own)
-├── README.md                  # This file
-└── .version                   # Version string
-```
+1. Detects OS (Ubuntu/Debian/CentOS/AlmaLinux)
+2. Installs PostgreSQL 16, configures `pg_hba.conf` for password auth
+3. Creates 6 databases with random password
+4. Installs Redis, verifies PONG
+5. Installs FreeSWITCH, configures ESL password + SIP external IP
+6. Deploys binary to `/opt/bos3000/bin/bos3000`
+7. Generates JWT secret, writes `/opt/bos3000/.env`
+8. Configures firewall (ufw/firewalld)
+9. Installs systemd service
+10. Runs verification checks on all components
 
 ## Configuration
 
@@ -58,6 +58,7 @@ After installation, edit `/opt/bos3000/.env`:
 | Variable | Description |
 |----------|-------------|
 | `BOS3000_DB_*` | PostgreSQL connection (auto-configured) |
+| `REDIS_HOST/PORT` | Redis connection (default: 127.0.0.1:6379) |
 | `FS_ADDRESS` | FreeSWITCH ESL host:port |
 | `FS_PASSWORD` | FreeSWITCH ESL password |
 | `JWT_SECRET` | JWT signing key (auto-generated) |
@@ -82,7 +83,7 @@ sudo systemctl start bos3000
 sudo systemctl stop bos3000
 sudo systemctl restart bos3000
 sudo systemctl status bos3000
-journalctl -u bos3000 -f    # View logs
+journalctl -u bos3000 -f
 ```
 
 ## Ports
@@ -98,14 +99,24 @@ journalctl -u bos3000 -f    # View logs
 ## Upgrading
 
 ```bash
-# On dev machine
+# Build new version
 bash scripts/build.sh v1.1.0
 scp dist/bos3000-v1.1.0-linux-amd64.tar.gz root@<server>:/tmp/
 
-# On server
-ssh root@<server>
+# On server — just replace binary
 tar xzf /tmp/bos3000-v1.1.0-linux-amd64.tar.gz -C /tmp
 sudo systemctl stop bos3000
 sudo cp /tmp/bos3000/bos3000 /opt/bos3000/bin/bos3000
 sudo systemctl start bos3000
+```
+
+## External FreeSWITCH
+
+If FreeSWITCH runs on a separate server:
+
+```bash
+sudo bash install.sh --eip 47.x.x.x --skip-freeswitch
+# Then edit /opt/bos3000/.env:
+#   FS_ADDRESS=<fs-server-ip>:8021
+#   FS_PASSWORD=<fs-password>
 ```
